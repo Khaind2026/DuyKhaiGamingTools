@@ -3,9 +3,17 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:allowBackup="false"
-        android:label="DuyKhai Gaming Tools"
+        android:label="DuyKhaiDex Gaming"
+        android:icon="@drawable/ic_duykhaidex"
         android:supportsRtl="true"
         android:theme="@style/Theme.DuyKhai">
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:exported="true"
+            android:enabled="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
