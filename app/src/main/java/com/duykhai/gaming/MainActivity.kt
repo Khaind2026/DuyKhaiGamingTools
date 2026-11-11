@@ -197,7 +197,7 @@ class ApplyJobService : JobService() {
 }
 
 class MainActivity : Activity() {
-    private val background = Color.rgb(9, 16, 30)
+    private val bgColor = Color.rgb(9, 16, 30)
     private val surface = Color.rgb(22, 35, 57)
     private val cyan = Color.rgb(0, 215, 255)
     private val violet = Color.rgb(169, 130, 255)
@@ -217,13 +217,13 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = background
-        window.navigationBarColor = background
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(26))
-            setBackgroundColor(background)
+            setBackgroundColor(bgColor)
         }
         val scroll = ScrollView(this)
         scroll.addView(layout)
@@ -404,7 +404,7 @@ class MainActivity : Activity() {
         text = value
         textSize = 13f
         isAllCaps = false
-        setTextColor(background)
+        setTextColor(bgColor)
         setTypeface(null, Typeface.BOLD)
         minimumHeight = dp(54)
         background = GradientDrawable().apply {
