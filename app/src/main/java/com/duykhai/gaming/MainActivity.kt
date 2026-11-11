@@ -396,9 +396,58 @@ class MainActivity : Activity() {
         }
         space(layout, 13)
 
+        val cpuCard = panel()
+        layout.addView(cpuCard)
+        cpuCard.addView(label("03  CPU PERFORMANCE PROFILES", 16f, violet, true))
+        space(cpuCard, 8)
+        cpuPreset = selector(arrayOf(
+            "Không thay đổi xung nhịp",
+            "ECO • Tiết kiệm • ≤70% mức xung gốc",
+            "BALANCED • Ổn định • ≤90% mức xung gốc",
+            "SUPER • Tối đa xung gốc • 100%"
+        ))
+        cpuCard.addView(cpuPreset)
+        cpuCard.addView(label("Chỉ giới hạn trần CPU trong dải nhà sản xuất. KHÔNG ép vượt xung gốc, không bỏ bảo vệ nhiệt. Một số kernel sẽ khóa thao tác.", 11f, muted))
+        space(layout, 13)
+
+        val colorCard = panel()
+        layout.addView(colorCard)
+        colorCard.addView(label("04  IMAGE COLOR LAB (PREVIEW)", 16f, cyan, true))
+        space(colorCard, 7)
+        colorPreview = ImageView(this).apply {
+            setImageBitmap(createColorSample())
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = LinearLayout.LayoutParams(-1, dp(120))
+        }
+        colorCard.addView(colorPreview)
+        colorCard.addView(label("Bão hòa • 0–200%", 12f, muted))
+        saturationSeek = SeekBar(this).apply { max = 200 }
+        colorCard.addView(saturationSeek)
+        colorCard.addView(label("Độ tươi (tăng màu) • 0–100", 12f, muted))
+        vibranceSeek = SeekBar(this).apply { max = 100 }
+        colorCard.addView(vibranceSeek)
+        colorCard.addView(label("Tương phản • 50–150%", 12f, muted))
+        contrastSeek = SeekBar(this).apply { max = 100 }
+        colorCard.addView(contrastSeek)
+        colorCard.addView(label("Độ sáng • -50 đến +50", 12f, muted))
+        brightnessSeek = SeekBar(this).apply { max = 100 }
+        colorCard.addView(brightnessSeek)
+        val colorListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) { updateColorPreview() }
+            override fun onStartTrackingTouch(bar: SeekBar?) {}
+            override fun onStopTrackingTouch(bar: SeekBar?) {}
+        }
+        for (seek in arrayOf(saturationSeek, vibranceSeek, contrastSeek, brightnessSeek))
+            seek.setOnSeekBarChangeListener(colorListener)
+        colorCard.addView(action("MỞ CÀI ĐẶT MÀU MÀN HÌNH", violet).apply {
+            setOnClickListener { startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+        })
+        colorCard.addView(label("Thanh chỉnh màu chỉ mô phỏng trong preview. Chưa chỉnh màu toàn hệ thống vì API Samsung khác theo ROM.", 11f, muted))
+        space(layout, 13)
+
         val boot = panel()
         layout.addView(boot)
-        boot.addView(label("03  AUTO BOOT", 16f, cyan, true))
+        boot.addView(label("05  AUTO BOOT", 16f, cyan, true))
         autoBoot = Switch(this).apply {
             text = "Tự áp dụng sau khi khởi động lại"
             setTextColor(Color.WHITE)
@@ -419,6 +468,13 @@ class MainActivity : Activity() {
         layout.addView(label("Lưu ý: Đây là điều khiển màn hình logic mặc định, không phải chế độ HDMI/DeX hay mở khóa FPS game.", 11f, muted))
 
         restoreFields(Profiles.load(this))
+        try {
+            Sui.init(packageName)
+            Shizuku.addBinderReceivedListenerSticky(shizukuBinderListener)
+            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+        } catch (_: Throwable) { }
+        updatePrivilegeIndicators()
+        probeRoot()
         autoBoot.setOnCheckedChangeListener { _, checked ->
             Profiles.save(this, readFields())
             if (!checked) BootJobs.cancel(this)
@@ -457,6 +513,11 @@ class MainActivity : Activity() {
         hz = intArrayOf(0, 60, 90, 120, 144, 165, 200)[hz.selectedItemPosition],
         fps = intArrayOf(0, 30, 45, 60, 90, 120)[fps.selectedItemPosition],
         gamePackage = gamePackage.text.toString().trim(),
+        cpuMode = cpuPreset.selectedItemPosition,
+        saturation = saturationSeek.progress,
+        vibrance = vibranceSeek.progress,
+        contrast = contrastSeek.progress + 50,
+        brightness = brightnessSeek.progress - 50,
         autoBoot = autoBoot.isChecked
     )
 
@@ -466,8 +527,15 @@ class MainActivity : Activity() {
         dpiEnabled.isChecked = p.dpiEnabled
         dpiSeek.progress = (p.dpi.coerceIn(160, 640) - 160) / 10
         hz.setSelection(intArrayOf(0, 60, 90, 120, 144, 165, 200).indexOf(p.hz).coerceAtLeast(0))
-        fps.setSelection(intArrayOf(0, 30, 45, 60, 90, 120).indexOf(p.fps).coerceAtLeast(0))
+        fps.setSelection(intArrayOf(0, 30, 45, 60, 90, 120, 144, 165).indexOf(p.fps).coerceAtLeast(0))
+        gamePreset.setSelection(GameCatalog.position(p.gamePackage))
         gamePackage.setText(p.gamePackage)
+        cpuPreset.setSelection(p.cpuMode.coerceIn(0, 3))
+        saturationSeek.progress = p.saturation.coerceIn(0, 200)
+        vibranceSeek.progress = p.vibrance.coerceIn(0, 100)
+        contrastSeek.progress = (p.contrast - 50).coerceIn(0, 100)
+        brightnessSeek.progress = (p.brightness + 50).coerceIn(0, 100)
+        updateColorPreview()
         autoBoot.isChecked = p.autoBoot
     }
 
