@@ -539,6 +539,81 @@ class MainActivity : Activity() {
         autoBoot.isChecked = p.autoBoot
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::rootLed.isInitialized) {
+            updatePrivilegeIndicators()
+            probeRoot()
+        }
+    }
+
+    private fun updatePrivilegeIndicators() {
+        if (!::shizukuLed.isInitialized) return
+        val state = ShizukuAccess.status()
+        shizukuLed.text = "● SHIZUKU: " + state
+        shizukuLed.setTextColor(if (state.startsWith("ĐÃ CẤP")) Color.rgb(68, 235, 160) else muted)
+    }
+
+    private fun probeRoot() {
+        if (!::rootLed.isInitialized) return
+        rootLed.text = "● ROOT: ĐANG YÊU CẦU QUYỀN..."
+        rootLed.setTextColor(muted)
+        executor.execute {
+            val granted = RootAccess.status()
+            runOnUiThread {
+                if (::rootLed.isInitialized) {
+                    rootLed.text = if (granted) "● ROOT: ĐÃ KẾT NỐI" else "● ROOT: CHƯA CẤP QUYỀN"
+                    rootLed.setTextColor(if (granted) Color.rgb(68, 235, 160) else Color.rgb(255, 145, 145))
+                }
+            }
+        }
+    }
+
+    private fun createColorSample(): Bitmap {
+        val bitmap = Bitmap.createBitmap(640, 240, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.shader = android.graphics.LinearGradient(
+            0f, 0f, 640f, 240f,
+            intArrayOf(Color.rgb(14, 44, 110), Color.rgb(15, 212, 245), Color.rgb(255, 113, 170)),
+            null, android.graphics.Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, 640f, 240f, paint)
+        paint.shader = null
+        paint.color = Color.rgb(251, 185, 51)
+        canvas.drawCircle(120f, 94f, 70f, paint)
+        paint.color = Color.rgb(58, 33, 110)
+        canvas.drawCircle(480f, 158f, 86f, paint)
+        paint.color = Color.WHITE
+        paint.textSize = 43f
+        paint.isFakeBoldText = true
+        canvas.drawText("DUYKHAIDEX", 174f, 126f, paint)
+        paint.textSize = 23f
+        canvas.drawText("COLOR LAB", 232f, 156f, paint)
+        return bitmap
+    }
+
+    private fun updateColorPreview() {
+        if (!::colorPreview.isInitialized || !::saturationSeek.isInitialized ||
+            !::vibranceSeek.isInitialized || !::contrastSeek.isInitialized ||
+            !::brightnessSeek.isInitialized) return
+
+        // Preview-only approximation: vibrance acts as a gentle saturation boost.
+        val saturation = (saturationSeek.progress / 100f + vibranceSeek.progress / 500f)
+            .coerceIn(0f, 2.2f)
+        val contrast = (contrastSeek.progress + 50) / 100f
+        val brightness = (brightnessSeek.progress - 50).toFloat()
+        val matrix = ColorMatrix().apply { setSaturation(saturation) }
+        val offset = (1f - contrast) * 128f + brightness
+        matrix.postConcat(ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, offset,
+            0f, contrast, 0f, 0f, offset,
+            0f, 0f, contrast, 0f, offset,
+            0f, 0f, 0f, 1f, 0f
+        )))
+        colorPreview.colorFilter = ColorMatrixColorFilter(matrix)
+    }
+
     private fun selector(values: Array<String>) = Spinner(this).apply {
         val adapt = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, values)
         adapt.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -584,6 +659,10 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
     override fun onDestroy() {
+        try {
+            Shizuku.removeBinderReceivedListener(shizukuBinderListener)
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        } catch (_: Throwable) {}
         executor.shutdown()
         super.onDestroy()
     }
