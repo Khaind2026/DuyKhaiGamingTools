@@ -98,32 +98,3 @@ object CpuProfiles {
         """.trimIndent()
     }
 }
-
-        return """
-            changed=0
-            failed=0
-            for p in /sys/devices/system/cpu/cpufreq/policy*; do
-              [ -d "${dollar}p" ] || continue
-              [ -r "${dollar}p/cpuinfo_max_freq" ] || continue
-              [ -r "${dollar}p/scaling_min_freq" ] || continue
-              [ -w "${dollar}p/scaling_max_freq" ] || { failed=${dollar}((failed+1)); continue; }
-              stock=${dollar}(cat "${dollar}p/cpuinfo_max_freq")
-              minimum=${dollar}(cat "${dollar}p/scaling_min_freq")
-              case "${dollar}stock:${dollar}minimum" in *[!0-9:]*|:*|*:) failed=${dollar}((failed+1)); continue;; esac
-              target=${dollar}((stock*$percent/100))
-              [ "${dollar}target" -ge "${dollar}minimum" ] || target=${dollar}minimum
-              if [ -r "${dollar}p/scaling_available_frequencies" ]; then
-                best=0
-                for f in ${dollar}(cat "${dollar}p/scaling_available_frequencies"); do
-                  case "${dollar}f" in *[!0-9]*|'') continue;; esac
-                  if [ "${dollar}f" -le "${dollar}target" ] && [ "${dollar}f" -ge "${dollar}minimum" ] && [ "${dollar}f" -gt "${dollar}best" ]; then best=${dollar}f; fi
-                done
-                [ "${dollar}best" -eq 0 ] || target=${dollar}best
-              fi
-              if echo "${dollar}target" > "${dollar}p/scaling_max_freq" 2>/dev/null; then changed=${dollar}((changed+1)); else failed=${dollar}((failed+1)); fi
-            done
-            echo "CPU policies applied=${dollar}changed failures=${dollar}failed (stock limits, thermal preserved)"
-            [ "${dollar}changed" -gt 0 ] && [ "${dollar}failed" -eq 0 ]
-        """.trimIndent()
-    }
-}
