@@ -241,7 +241,25 @@ class MainActivity : Activity() {
     private lateinit var hz: Spinner
     private lateinit var fps: Spinner
     private lateinit var gamePackage: EditText
+    private lateinit var gamePreset: Spinner
+    private lateinit var cpuPreset: Spinner
+    private lateinit var saturationSeek: SeekBar
+    private lateinit var vibranceSeek: SeekBar
+    private lateinit var contrastSeek: SeekBar
+    private lateinit var brightnessSeek: SeekBar
+    private lateinit var colorPreview: ImageView
+    private lateinit var rootLed: TextView
+    private lateinit var shizukuLed: TextView
     private lateinit var autoBoot: Switch
+
+    private val shizukuPermissionListener =
+        Shizuku.OnRequestPermissionResultListener { _, _ ->
+            runOnUiThread { updatePrivilegeIndicators() }
+        }
+    private val shizukuBinderListener =
+        Shizuku.OnBinderReceivedListener {
+            runOnUiThread { updatePrivilegeIndicators() }
+        }
     private lateinit var status: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -258,7 +276,19 @@ class MainActivity : Activity() {
         scroll.addView(layout)
         setContentView(scroll)
 
-        layout.addView(label("DUYKHAI // GAMING", 25f, cyan, true))
+        val brandRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        brandRow.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_duykhaidex)
+            layoutParams = LinearLayout.LayoutParams(dp(76), dp(76))
+        })
+        val brandLabel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+            addView(label("DUYKHAIDEX", 25f, cyan, true))
+            addView(label("GAMING CONTROL • ROOT", 12f, violet, true))
+        }
+        brandRow.addView(brandLabel)
+        layout.addView(brandRow)
         layout.addView(label("SAMSUNG ROOT DISPLAY ENGINE  •  v0.1", 11f, muted))
         space(layout, 18)
         layout.addView(stat("DEVICE ONLINE", Build.MANUFACTURER.uppercase() + "  " + Build.MODEL))
@@ -270,6 +300,33 @@ class MainActivity : Activity() {
                 ?.joinToString(" / ") ?: "Unknown"
         } catch (e: Exception) { "Unknown" }
         layout.addView(stat("PANEL REPORTS", modes + " Hz"))
+        space(layout, 14)
+
+        val privilegeCard = panel()
+        layout.addView(privilegeCard)
+        privilegeCard.addView(label("00  QUYỀN ĐIỀU KHIỂN", 16f, cyan, true))
+        space(privilegeCard, 8)
+        rootLed = label("● ROOT: ĐANG KIỂM TRA", 14f, muted, true)
+        shizukuLed = label("● SHIZUKU: ĐANG KIỂM TRA", 14f, muted, true)
+        privilegeCard.addView(rootLed)
+        space(privilegeCard, 5)
+        privilegeCard.addView(shizukuLed)
+        space(privilegeCard, 9)
+        privilegeCard.addView(action("YÊU CẦU QUYỀN ROOT", cyan).apply {
+            setOnClickListener { probeRoot() }
+        })
+        privilegeCard.addView(action("CẤP QUYỀN SHIZUKU", violet).apply {
+            setOnClickListener {
+                try {
+                    if (Shizuku.pingBinder()) ShizukuAccess.request()
+                    else status.text = "Hãy mở Shizuku và khởi chạy dịch vụ trước."
+                } catch (e: Exception) {
+                    status.text = "Chưa kết nối Shizuku: " + e.message
+                }
+                updatePrivilegeIndicators()
+            }
+        })
+        privilegeCard.addView(label("Root dùng để áp dụng hệ thống/CPU. Shizuku hiển thị trạng thái, chưa là backend điều chỉnh.", 11f, muted))
         space(layout, 14)
 
         val screen = panel()
@@ -312,11 +369,17 @@ class MainActivity : Activity() {
         hz = selector(arrayOf("Không đổi", "60 Hz", "90 Hz", "120 Hz", "144 Hz", "165 Hz", "200 Hz"))
         performance.addView(hz)
         space(performance, 10)
-        performance.addView(label("FPS GameManager (chỉ game hỗ trợ)", 13f, muted))
-        fps = selector(arrayOf("Không đổi", "30 FPS", "45 FPS", "60 FPS", "90 FPS", "120 FPS"))
+        performance.addView(label("FPS GameManager (chỉ game/ROM hỗ trợ)", 13f, muted))
+        fps = selector(arrayOf("Không đổi", "30 FPS", "45 FPS", "60 FPS", "90 FPS", "120 FPS", "144 FPS*", "165 FPS*"))
         performance.addView(fps)
         space(performance, 10)
-        performance.addView(label("Package game", 13f, muted))
+        performance.addView(label("* 144/165 FPS là yêu cầu thử nghiệm, không bảo đảm game đạt tốc độ này.", 11f, muted))
+        space(performance, 9)
+        performance.addView(label("Chọn game cài sẵn", 13f, muted))
+        gamePreset = selector(GameCatalog.labels)
+        performance.addView(gamePreset)
+        space(performance, 8)
+        performance.addView(label("Package game (có thể sửa thủ công)", 13f, muted))
         gamePackage = EditText(this).apply {
             hint = "com.example.game"
             setHintTextColor(Color.GRAY)
@@ -325,6 +388,12 @@ class MainActivity : Activity() {
             textSize = 14f
         }
         performance.addView(gamePackage)
+        gamePreset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position > 0) gamePackage.setText(GameCatalog.packages[position])
+            }
+        }
         space(layout, 13)
 
         val boot = panel()
