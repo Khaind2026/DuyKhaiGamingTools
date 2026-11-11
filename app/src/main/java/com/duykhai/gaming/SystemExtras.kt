@@ -69,7 +69,7 @@ object CpuProfiles {
     fun command(mode: Int): String {
         require(mode in 1..3)
         val percent = when (mode) { 1 -> 70; 2 -> 90; else -> 100 }
-        val dollar = '
+        val dollar = 36.toChar()
         return """
             changed=0
             failed=0
