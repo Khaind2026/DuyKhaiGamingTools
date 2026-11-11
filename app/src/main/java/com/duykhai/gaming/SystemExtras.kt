@@ -44,7 +44,8 @@ object GameCatalog {
         "PUBG Mobile Global",
         "Free Fire",
         "Free Fire MAX",
-        "Delta Force",
+        "Delta Force Global",
+        "Delta Force Garena",
         "Call of Duty Mobile VN",
         "Call of Duty Mobile Global"
     )
@@ -55,6 +56,7 @@ object GameCatalog {
         "com.dts.freefireth",
         "com.dts.freefiremax",
         "com.proxima.dfm",
+        "com.garena.game.df",
         "com.vng.codmvn",
         "com.activision.callofduty.shooter"
     )

@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: duykhaidex-build-main
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
