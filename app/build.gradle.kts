@@ -4,11 +4,13 @@ plugins {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 }
 
 android {
+    buildFeatures { aidl = true }
     namespace = "com.duykhai.gaming"
     compileSdk = 35
 
@@ -16,8 +18,8 @@ android {
         applicationId = "com.duykhai.gaming"
         minSdk = 28
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.2.1"
     }
 
     compileOptions {
