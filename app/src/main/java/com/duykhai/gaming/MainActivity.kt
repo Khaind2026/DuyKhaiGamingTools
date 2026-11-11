@@ -10,6 +10,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.provider.Settings
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
@@ -28,6 +34,10 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.ArrayAdapter
+import android.widget.AdapterView
+import android.widget.ImageView
+import rikka.shizuku.Shizuku
+import rikka.sui.Sui
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -42,6 +52,11 @@ data class Profile(
     val hz: Int = 0,
     val fps: Int = 0,
     val gamePackage: String = "",
+    val cpuMode: Int = 0,
+    val saturation: Int = 100,
+    val vibrance: Int = 0,
+    val contrast: Int = 100,
+    val brightness: Int = 0,
     val autoBoot: Boolean = false
 )
 
@@ -57,6 +72,11 @@ object Profiles {
             hz = p.getInt("hz", 0),
             fps = p.getInt("fps", 0),
             gamePackage = p.getString("gamePackage", "") ?: "",
+            cpuMode = p.getInt("cpuMode", 0),
+            saturation = p.getInt("saturation", 100),
+            vibrance = p.getInt("vibrance", 0),
+            contrast = p.getInt("contrast", 100),
+            brightness = p.getInt("brightness", 0),
             autoBoot = p.getBoolean("autoBoot", false)
         )
     }
@@ -69,6 +89,11 @@ object Profiles {
             .putInt("hz", c.hz)
             .putInt("fps", c.fps)
             .putString("gamePackage", c.gamePackage)
+            .putInt("cpuMode", c.cpuMode)
+            .putInt("saturation", c.saturation)
+            .putInt("vibrance", c.vibrance)
+            .putInt("contrast", c.contrast)
+            .putInt("brightness", c.brightness)
             .putBoolean("autoBoot", c.autoBoot)
             .commit()
     }
@@ -76,7 +101,7 @@ object Profiles {
 
 object DisplayRoot {
     private val hzAllowed = setOf(60, 90, 120, 144, 165, 200)
-    private val fpsAllowed = setOf(30, 45, 60, 90, 120)
+    private val fpsAllowed = setOf(30, 45, 60, 90, 120, 144, 165)
     private val gamePattern = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
 
     data class Result(val ok: Boolean, val info: String)
@@ -116,8 +141,11 @@ object DisplayRoot {
                 return Result(false, "Chọn FPS và nhập đúng package game (com.example.game)")
             commands.add("cmd game set --fps " + p.fps + " " + p.gamePackage)
         }
-        if (commands.isEmpty()) return Result(false, "Chưa chọn thiết lập nào")
-        return runCommands(commands)
+        if (commands.isEmpty() && p.cpuMode == 0) return Result(false, "Chưa chọn thiết lập nào")
+        val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands)
+        val cpuResult = if (p.cpuMode == 0) Result(true, "CPU giữ nguyên")
+                        else runCommands(listOf(CpuProfiles.command(p.cpuMode)))
+        return Result(displayResult.ok && cpuResult.ok, displayResult.info + " • CPU: " + cpuResult.info)
     }
 
     fun reset(p: Profile): Result {
@@ -128,6 +156,7 @@ object DisplayRoot {
             "settings delete system min_refresh_rate"
         )
         if (gamePattern.matches(p.gamePackage)) commands.add("cmd game reset " + p.gamePackage)
+        if (p.cpuMode != 0) commands.add(CpuProfiles.command(3))
         return runCommands(commands)
     }
 
