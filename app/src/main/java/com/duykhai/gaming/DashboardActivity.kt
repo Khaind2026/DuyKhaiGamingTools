@@ -345,7 +345,7 @@ class DashboardActivity : Activity() {
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
             addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
-            addView(label("Gaming Tools    v0.6.1", 17f, ui.purple, true))
+            addView(label("Gaming Tools    v0.7.0", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label("⚙", 27f, ui.white, true).apply {
@@ -646,7 +646,7 @@ class DashboardActivity : Activity() {
         val modes = spinner(arrayOf("Không thay đổi",
             "🍃 ECO • giới hạn 70% trần gốc",
             "⚖  BALANCED • 90% trần gốc",
-            "🔥 SUPER • 100% trần gốc"), p.cpuMode)
+            "🔥 MAX STOCK • 100% trần gốc"), p.cpuMode)
         card.addView(modes)
         note(card, "Đọc lại min/max sau khi áp dụng. Một số kernel Samsung không cho thay đổi; app sẽ báo lỗi thay vì khẳng định khóa thành công.")
         val readings = panel(body, ui.purple)
@@ -704,6 +704,14 @@ class DashboardActivity : Activity() {
             }
         }
         status(readings)
+        action(readings, "CHẨN ĐOÁN XUNG CPU & GIỚI HẠN ROM") {
+            val output = feedback
+            output?.text = "Đang đọc giới hạn CPU…"
+            worker.execute {
+                val result = CpuProfiles.inspect()
+                runOnUiThread { output?.text = result.take(1800) }
+            }
+        }
         action(readings, "ÁP DỤNG CHẾ ĐỘ CPU") {
             val current = Profiles.load(this)
             applyProfile(current.copy(cpuMode = modes.selectedItemPosition, fps = 0, hz = 0,
@@ -1060,10 +1068,25 @@ class DashboardActivity : Activity() {
                     } catch (_: Exception) { toast("JSON không hợp lệ") }
                 }.setNegativeButton("Hủy", null).show()
         }
+        val battery = panel(body, ui.purple)
+        groupTitle(battery, "PIN 999% • MÔ PHỎNG TRONG ỨNG DỤNG")
+        val demoPrefs = getSharedPreferences("visual_demo", MODE_PRIVATE)
+        val demoSwitch = Switch(this).apply {
+            text = "Hiển thị nhãn PIN DEMO 999%"
+            setTextColor(ui.white)
+            isChecked = demoPrefs.getBoolean("battery999", false)
+        }
+        battery.addView(demoSwitch)
+        note(battery, "Chỉ thay đổi nhãn trong DuyKhaiDex, không giả % pin trong Android, " +
+            "không ảnh hưởng quản lý sạc hoặc cảnh báo pin.")
+        demoSwitch.setOnCheckedChangeListener { _, enabled ->
+            demoPrefs.edit().putBoolean("battery999", enabled).apply()
+            toast(if (enabled) "Đã bật PIN DEMO 999%" else "Đã tắt PIN DEMO")
+        }
         val about = panel(body, ui.cyan)
         groupTitle(about, "THÔNG TIN ỨNG DỤNG")
         about.addView(label("DuyKhaiDex Gaming Tools", 16f, ui.white, true))
-        about.addView(label("Phiên bản 0.6.1 • Root & Sensor Fix", 12f, ui.muted))
+        about.addView(label("Phiên bản 0.7.0 • Clean Menu & Color", 12f, ui.muted))
         about.addView(label("Samsung DeX • Zalo 0862134811", 14f, ui.green, true))
         action(about, "MỞ ZALO") { openZalo() }
     }
