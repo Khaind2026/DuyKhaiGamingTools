@@ -46,6 +46,8 @@ class MonitorOverlayService : Service() {
     private var overlay: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var hasRoot = false
+    private var externalCached: PerformanceMonitor.ExternalReadout? = null
+    private var externalAt = 0L
     private var output: TextView? = null
     private var titleView: TextView? = null
     private var detailView: TextView? = null
@@ -89,11 +91,17 @@ class MonitorOverlayService : Service() {
                     val pkg = pref.getString("game", Profiles.load(this@MonitorOverlayService).gamePackage).orEmpty()
                     val root = RootAccess.status()
                     val cpu = try {
-                        PerformanceMonitor.sample(if (source == "game") pkg else "", root)
+                        PerformanceMonitor.sample(if (source == "game") pkg else "",
+                            root, this@MonitorOverlayService)
                     } catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không đọc được CPU") }
                     val ext = if (source == "external") try {
-                        PerformanceMonitor.external(this@MonitorOverlayService, root)
-                    } catch (_: Exception) { null } else null
+                        val now = System.currentTimeMillis()
+                        if (externalCached == null || now - externalAt >= 3500L) {
+                            externalCached = PerformanceMonitor.external(this@MonitorOverlayService, root)
+                            externalAt = now
+                        }
+                        externalCached
+                    } catch (_: Exception) { externalCached } else null
                     ui.post {
                         if (active) {
                             val lines = mutableListOf<String>()
@@ -106,10 +114,18 @@ class MonitorOverlayService : Service() {
                                 lines.add("HDMI Hz: " +
                                     (ext?.refreshHz?.let { String.format(java.util.Locale.US, "%.0f", it) } ?: "—"))
                             }
-                            if (pref.getBoolean("temp", true))
-                                lines.add("CPU: " + PerformanceMonitor.temperatureLabel(cpu.temperatureC))
-                            if (pref.getBoolean("clock", true))
+                            if (pref.getBoolean("temp", true)) {
+                                lines.add("CPU hotspot: " + PerformanceMonitor.temperatureLabel(cpu.temperatureC))
+                                cpu.sensorName?.let { lines.add("Nhiệt từ: " + it.take(34)) }
+                            }
+                            if (pref.getBoolean("clock", true)) {
                                 lines.add("XUNG: " + PerformanceMonitor.clocksLabel(cpu.cpuClocks))
+                                cpu.clockSource?.let { lines.add("Nguồn xung: " + it.take(32)) }
+                            }
+                            if (cpu.temperatureC == null && cpu.cpuClocks.isEmpty())
+                                lines.add("Chưa đọc được cảm biến • kiểm tra quyền ROM")
+                            if (source == "external" && ext?.presentedLayerFps == null)
+                                lines.add("FPS HDMI: ROM không cấp dữ liệu layer")
                             output?.text = lines.joinToString("\n").ifBlank { "Chưa chọn thông số" }
                         }
                         busy.set(false)
@@ -117,31 +133,43 @@ class MonitorOverlayService : Service() {
                 }
             }
             updateScale()
-            ui.postDelayed(this, 3000L)
+            ui.postDelayed(this, 1500L)
         }
+    }
+
+    private fun persistStatus(message: String) {
+        getSharedPreferences("hud_diagnostics", MODE_PRIVATE).edit()
+            .putString("last_status", message)
+            .putLong("status_at", System.currentTimeMillis())
+            .apply()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            persistStatus("Đã tắt HUD theo yêu cầu")
             stopSelf()
             return START_NOT_STICKY
         }
         if (!Settings.canDrawOverlays(this)) {
+            persistStatus("Thiếu quyền Hiển thị trên ứng dụng khác")
             stopSelf()
             return START_NOT_STICKY
         }
         if (active) return START_NOT_STICKY
-        createNotification()
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        hasRoot = RootAccess.status()
-        if (!hasRoot) CommandRunner.connect(this)
         try {
+            createNotification()
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            hasRoot = RootAccess.status()
+            if (!hasRoot) CommandRunner.connect(this)
             showHud()
             active = true
+            persistStatus("HUD đang chạy • 1,5 giây/lần • chạm giữ chữ để di chuyển")
             ui.post(tick)
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            persistStatus("Không bật được HUD: " + error.javaClass.simpleName + " • " +
+                (error.message ?: "Không có thông tin").take(220))
             stopSelf()
         }
         return START_NOT_STICKY
@@ -155,7 +183,7 @@ class MonitorOverlayService : Service() {
             )
         }
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, DashboardActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val stop = PendingIntent.getService(this, 1,
