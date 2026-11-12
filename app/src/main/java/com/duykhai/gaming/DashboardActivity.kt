@@ -301,7 +301,7 @@ class DashboardActivity : Activity() {
         val logo = ImageView(this).apply { setImageResource(R.drawable.ic_duykhaidex) }
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
-            addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, 3) })
+            addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
             addView(label("Gaming Tools    v0.5.0", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
