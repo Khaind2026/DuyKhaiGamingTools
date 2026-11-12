@@ -8,7 +8,12 @@ data class MonitorSnapshot(
     val fps: Float?,
     val temperatureC: Float?,
     val cpuClocks: List<Pair<String, Int>>,
-    val diagnostic: String
+    val diagnostic: String,
+    val sensorName: String? = null,
+    val sensorSource: String? = null,
+    val clockSource: String? = null,
+    val temperatureReadings: List<ThermalProbe> = emptyList(),
+    val sampledAtMs: Long = System.currentTimeMillis()
 )
 
 /**
@@ -149,31 +154,43 @@ object PerformanceMonitor {
         return values.maxOrNull()
     }
 
-    fun sample(gamePackage: String, hasRoot: Boolean): MonitorSnapshot {
-        val first = command(sensorScript(), false)
-        var readings = readSensorData(first.getOrNull(1).orEmpty())
-        if (readings.first.isEmpty() || readings.second == null) {
-            // With a previously granted session, try privileged sysfs once.
-            if (hasRoot || CommandRunner.ready()) {
-                val extra = command(sensorScript(), hasRoot)
-                val elevated = readSensorData(extra.getOrNull(1).orEmpty())
-                readings = (if (elevated.first.isNotEmpty()) elevated.first else readings.first) to
-                    (elevated.second ?: readings.second)
+    @Volatile private var halAt = 0L
+    @Volatile private var halValue: Float? = null
+
+    fun sample(gamePackage: String, hasRoot: Boolean, context: Context? = null): MonitorSnapshot {
+        val data = RealtimeSensors.sample(context)
+        var temperature = data.selectedCpu?.celsius
+        var sensorName = data.selectedCpu?.id
+        var sensorSource = data.selectedCpu?.source
+        // On Samsung HAL often reports an actual CPU type-0 temperature when sysfs
+        // has only unidentified zones. Query at most once per 6 seconds.
+        if (temperature == null && (RootAccess.status() || CommandRunner.ready())) {
+            val now = System.currentTimeMillis()
+            if (now - halAt > 6000L) {
+                val response = command("dumpsys thermalservice", RootAccess.status())
+                halValue = if (response.getOrNull(0) == "0")
+                    parseThermalService(response.getOrElse(1) { "" }) else null
+                halAt = now
+            }
+            if (halValue != null) {
+                temperature = halValue
+                sensorName = "CPU (Thermal HAL)"
+                sensorSource = "thermalservice mType=0"
             }
         }
-        if (readings.second == null) {
-            val thermal = command("dumpsys thermalservice", hasRoot)
-            val fallback = parseThermalService(thermal.getOrNull(1).orEmpty())
-            readings = readings.first to fallback
-        }
-        val frame = try { readFps(gamePackage.trim(), hasRoot) }
-            catch (_: Exception) { null to "SurfaceFlinger không hỗ trợ thiết bị này." }
-        val sensorText = if (readings.second == null) "Không đọc được cảm biến CPU." else ""
+        val fps = if (gamePackage.isBlank()) null to "Không chọn game: chỉ đọc cảm biến CPU"
+            else try { readFps(gamePackage.trim(), hasRoot) }
+            catch (_: Exception) { null to "SurfaceFlinger không có dữ liệu FPS" }
         return MonitorSnapshot(
-            fps = frame.first,
-            temperatureC = readings.second,
-            cpuClocks = readings.first,
-            diagnostic = frame.second + if (sensorText.isNotEmpty()) " " + sensorText else ""
+            fps = fps.first,
+            temperatureC = temperature,
+            cpuClocks = data.frequencies.map { it.id to it.mhz },
+            diagnostic = RealtimeSensors.detail(data) + " • " + fps.second,
+            sensorName = sensorName,
+            sensorSource = sensorSource,
+            clockSource = data.frequencies.firstOrNull()?.source,
+            temperatureReadings = data.temperatures,
+            sampledAtMs = data.timestampMs
         )
     }
 
