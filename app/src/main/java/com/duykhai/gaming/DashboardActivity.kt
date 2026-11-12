@@ -799,35 +799,54 @@ class DashboardActivity : Activity() {
     }
 
     private fun renderColor() {
-        val body = begin("color", "Màu Sắc & Hiển Thị", 0xFFFF4CC9.toInt())
-        val p = Profiles.load(this)
+        val body = begin("color", "Màu sắc • Toàn hệ thống", 0xFFFF4CC9.toInt())
         val box = panel(body, ui.purple)
-        groupTitle(box, "HIỆU CHỈNH ẢNH MẪU")
-        val preview = TextView(this).apply {
-            text = "DUYKHAIDEX    ✦    COLOR LAB"
-            setTextColor(ui.white)
+        groupTitle(box, "ĐIỀU CHỈNH BÃO HÒA TOÀN HỆ THỐNG", ui.cyan)
+        val preview = label("DUYKHAIDEX  ✦  SATURATION", 17f, ui.white, true).apply {
             gravity = Gravity.CENTER
-            textSize = 17f
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xFF1458D7.toInt(), 0xFF1FE7DA.toInt(), 0xFFE61A9E.toInt())).apply {
-                cornerRadius = dp(14).toFloat()
+                intArrayOf(0xFF1760D8.toInt(), 0xFF00E4DC.toInt(),
+                    0xFFD81EA9.toInt())).apply { cornerRadius = dp(15).toFloat() }
+        }
+        box.addView(preview, LinearLayout.LayoutParams(-1, dp(115)))
+        note(box, "Thanh này điều khiển độ bão hòa bằng lệnh SurfaceFlinger " +
+            "khi ROM hỗ trợ. Không còn chỉ lưu thông số xem trước.")
+        var selected = Profiles.load(this).saturation.coerceIn(0, 200)
+        slider(box, "Bão hòa màn hình (%)", 0, 200, selected) { selected = it }
+        note(box, "100% là mặc định. Giá trị 0–200% chỉ có hiệu lực khi hệ thống " +
+            "chấp nhận lệnh; một số máy Samsung ghi đè trở lại.")
+        status(box)
+        action(box, "ÁP DỤNG ĐỘ BÃO HÒA") {
+            val target = selected
+            val output = feedback
+            output?.text = "Đang gửi lệnh màu…"
+            worker.execute {
+                if (!RootAccess.status()) RootAccess.reconnectIfRemembered(this)
+                val result = SystemColorControl.applySaturation(target)
+                if (result.startsWith("SurfaceFlinger đã nhận"))
+                    Profiles.save(this, Profiles.load(this).copy(saturation = target))
+                runOnUiThread { output?.text = result }
             }
         }
-        box.addView(preview, LinearLayout.LayoutParams(-1, dp(150)))
-        val values = intArrayOf(p.saturation, p.vibrance, p.contrast, p.brightness)
-        slider(box, "Bão hòa (Saturation)", 0, 200, values[0]) { values[0] = it }
-        slider(box, "Độ tươi (Vibrance)", 0, 100, values[1]) { values[1] = it }
-        slider(box, "Tương phản (Contrast)", 50, 150, values[2]) { values[2] = it }
-        slider(box, "Độ sáng (Brightness)", -50, 50, values[3]) { values[3] = it }
-        note(box, "Các thanh màu hiện chỉ là công cụ lưu cấu hình thử nghiệm. Android/Samsung không cho mọi app thay màu toàn màn hình bằng API công khai.")
-        action(box, "LƯU CẤU HÌNH MÀU") {
-            Profiles.save(this, Profiles.load(this).copy(
-                saturation = values[0], vibrance = values[1], contrast = values[2], brightness = values[3]))
-            toast("Đã lưu thông số màu (chưa áp dụng toàn hệ thống)")
+        action(box, "KHÔI PHỤC MÀU MẶC ĐỊNH 100%") {
+            val output = feedback
+            worker.execute {
+                if (!RootAccess.status()) RootAccess.reconnectIfRemembered(this)
+                val result = SystemColorControl.reset()
+                if (result.startsWith("SurfaceFlinger đã nhận"))
+                    Profiles.save(this, Profiles.load(this).copy(saturation = 100))
+                runOnUiThread { output?.text = result }
+            }
         }
-        action(box, "MỞ CÀI ĐẶT MÀN HÌNH SAMSUNG") {
+        val samsung = panel(body, ui.cyan)
+        groupTitle(samsung, "CHẾ ĐỘ MÀU CHÍNH THỨC CỦA SAMSUNG")
+        note(samsung, "Vivid / Natural và cân bằng trắng trong One UI là những " +
+            "thiết lập thực sự tác động đến màn hình nếu thiết bị hỗ trợ.")
+        action(samsung, "MỞ CHẾ ĐỘ MÀN HÌNH SAMSUNG") {
             startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
         }
+        note(samsung, "Tương phản, sắc nét, Vibrance tùy ý chưa có API hệ thống " +
+            "chung. Lệnh đổi bão hòa có thể được nhận nhưng không tạo hiệu ứng nhìn thấy.")
     }
 
     private fun renderOther() {
