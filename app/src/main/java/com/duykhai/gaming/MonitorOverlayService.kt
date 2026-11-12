@@ -69,10 +69,10 @@ class MonitorOverlayService : Service() {
         currentScale = scale
         val factor = scale / 100f
         val screenWidth = resources.displayMetrics.widthPixels
-        layout.width = (dp(288) * factor).roundToInt().coerceAtMost(screenWidth - dp(16))
+        layout.width = (dp(265) * factor).roundToInt().coerceAtMost(screenWidth - dp(16))
         layout.alpha = getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("alpha", 85)
             .coerceIn(40, 100) / 100f
-        output?.textSize = 12f * factor
+        output?.textSize = 14f * factor
         titleView?.textSize = 12f * factor
         detailView?.textSize = 10f * factor
         try { windowManager.updateViewLayout(view, layout) } catch (_: Exception) {}
@@ -83,29 +83,41 @@ class MonitorOverlayService : Service() {
         override fun run() {
             if (!active) return
             if (busy.compareAndSet(false, true)) {
-                val packageName = getSharedPreferences("hud_prefs", MODE_PRIVATE).getString("game", Profiles.load(this@MonitorOverlayService).gamePackage).orEmpty()
                 worker.execute {
-                    val data = try { PerformanceMonitor.sample(packageName, hasRoot) }
-                        catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không thể đọc cảm biến") }
+                    val pref = getSharedPreferences("hud_prefs", MODE_PRIVATE)
+                    val source = pref.getString("source", "external") ?: "external"
+                    val pkg = pref.getString("game", Profiles.load(this@MonitorOverlayService).gamePackage).orEmpty()
+                    val root = RootAccess.status()
+                    val cpu = try {
+                        PerformanceMonitor.sample(if (source == "game") pkg else "", root)
+                    } catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không đọc được CPU") }
+                    val ext = if (source == "external") try {
+                        PerformanceMonitor.external(this@MonitorOverlayService, root)
+                    } catch (_: Exception) { null } else null
                     ui.post {
                         if (active) {
-                            detailView?.text = data.diagnostic.take(140)
-                            val preferences = getSharedPreferences("hud_prefs", MODE_PRIVATE)
                             val lines = mutableListOf<String>()
-                            if (preferences.getBoolean("fps", true))
-                                lines.add("FPS: " + PerformanceMonitor.fpsLabel(data.fps))
-                            if (preferences.getBoolean("temp", true))
-                                lines.add("CPU: " + PerformanceMonitor.temperatureLabel(data.temperatureC))
-                            if (preferences.getBoolean("clock", true))
-                                lines.add("XUNG: " + PerformanceMonitor.clocksLabel(data.cpuClocks))
-                            output?.text = if (lines.isEmpty()) "Bật thông số trong DuyKhaiDex" else lines.joinToString("\n")
+                            if (pref.getBoolean("fps", true)) {
+                                lines.add(if (source == "external") {
+                                    "FPS HDMI: " + PerformanceMonitor.fpsLabel(ext?.presentedLayerFps)
+                                } else "FPS GAME: " + PerformanceMonitor.fpsLabel(cpu.fps))
+                            }
+                            if (source == "external") {
+                                lines.add("HDMI Hz: " +
+                                    (ext?.refreshHz?.let { String.format(java.util.Locale.US, "%.0f", it) } ?: "—"))
+                            }
+                            if (pref.getBoolean("temp", true))
+                                lines.add("CPU: " + PerformanceMonitor.temperatureLabel(cpu.temperatureC))
+                            if (pref.getBoolean("clock", true))
+                                lines.add("XUNG: " + PerformanceMonitor.clocksLabel(cpu.cpuClocks))
+                            output?.text = lines.joinToString("\n").ifBlank { "Chưa chọn thông số" }
                         }
                         busy.set(false)
                     }
                 }
             }
             updateScale()
-            ui.postDelayed(this, 3_000L)
+            ui.postDelayed(this, 3000L)
         }
     }
 
@@ -146,12 +158,16 @@ class MonitorOverlayService : Service() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val stop = PendingIntent.getService(this, 1,
+            Intent(this, MonitorOverlayService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentTitle("DuyKhaiDex • Gaming HUD")
             .setContentText("FPS ước tính • Nhiệt độ • Xung nhịp CPU")
             .setContentIntent(open)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "TẮT HUD", stop)
             .build()
         startForeground(NOTIFICATION_ID, notification)
     }
@@ -164,92 +180,59 @@ class MonitorOverlayService : Service() {
     }
 
     private fun showHud() {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(5), dp(5), dp(5), dp(5))
-            background = GradientDrawable().apply {
-                setColor(Color.argb(220, 7, 17, 33))
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.rgb(0, 215, 255))
-            }
+        val text = label("FPS HDMI: —\nHDMI Hz: —\nCPU: —\nXUNG: —", 12f).apply {
+            // Floating text only: no frame, panel, border, or caption.
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            setTextColor(Color.rgb(99, 250, 120))
+            setShadowLayer(5f, 1f, 1f, Color.rgb(9, 2, 28))
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            contentDescription = "Thông số hiệu năng. Kéo để đổi vị trí."
         }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val title = label("DUYKHAIDEX • HUD", 12f).apply {
-            setTextColor(Color.rgb(0, 220, 255))
-        }
-        titleView = title
-        val close = label("✕", 17f).apply {
-            contentDescription = "Đóng màn hình theo dõi"
-            setOnClickListener { stopSelf() }
-        }
-        val smaller = label("−", 18f).apply {
-            contentDescription = "Thu nhỏ HUD"
-            setOnClickListener { changeScale(-10) }
-        }
-        val bigger = label("+", 18f).apply {
-            contentDescription = "Phóng to HUD"
-            setOnClickListener { changeScale(10) }
-        }
-        header.addView(title, LinearLayout.LayoutParams(0, dp(34), 1f))
-        header.addView(smaller)
-        header.addView(bigger)
-        header.addView(close)
-        container.addView(header)
-        output = label("FPS: —\nCPU: —\nXUNG: —", 12f)
-        container.addView(output)
-        val detail = label("FPS chưa đo • chạy game để lấy mẫu", 10f).apply {
-            setTextColor(Color.rgb(170, 190, 210))
-        }
-        detailView = detail
-        container.addView(detail)
+        output = text
         val lp = WindowManager.LayoutParams(
-            dp(288),
+            dp(265),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            val corner = getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("corner", 1)
-            gravity = when (corner) {
+            gravity = when (getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("corner", 1)) {
                 0 -> Gravity.TOP or Gravity.START
                 1 -> Gravity.TOP or Gravity.END
                 2 -> Gravity.BOTTOM or Gravity.START
                 else -> Gravity.BOTTOM or Gravity.END
             }
-            x = dp(14)
-            y = dp(85)
+            x = dp(16)
+            y = dp(110)
         }
-        title.setOnTouchListener(object : View.OnTouchListener {
-            private var originX = 0
-            private var originY = 0
-            private var startX = 0f
-            private var startY = 0f
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
+        text.setOnTouchListener(object : View.OnTouchListener {
+            private var x = 0
+            private var y = 0
+            private var firstX = 0f
+            private var firstY = 0f
+            override fun onTouch(view: View, event: MotionEvent): Boolean {
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        originX = lp.x; originY = lp.y
-                        startX = event.rawX; startY = event.rawY
+                        x = lp.x; y = lp.y
+                        firstX = event.rawX; firstY = event.rawY
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        lp.x = originX + (event.rawX - startX).toInt()
-                        lp.y = originY + (event.rawY - startY).toInt()
-                        try { windowManager.updateViewLayout(container, lp) } catch (_: Exception) {}
+                        lp.x = (x + (event.rawX - firstX)).toInt().coerceAtLeast(0)
+                        lp.y = (y + (event.rawY - firstY)).toInt().coerceAtLeast(0)
+                        try { windowManager.updateViewLayout(text, lp) } catch (_: Exception) { }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        v.performClick()
+                        view.performClick()
                         return true
                     }
                 }
                 return false
             }
         })
-        windowManager.addView(container, lp)
-        overlay = container
+        windowManager.addView(text, lp)
+        overlay = text
         params = lp
         updateScale()
     }
