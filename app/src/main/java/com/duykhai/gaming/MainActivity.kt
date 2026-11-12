@@ -658,10 +658,29 @@ class MainActivity : Activity() {
         }
         for (seek in arrayOf(saturationSeek, vibranceSeek, contrastSeek, brightnessSeek))
             seek.setOnSeekBarChangeListener(colorListener)
+        colorCard.addView(action("ÁP DỤNG BÃO HÒA TOÀN HỆ THỐNG", cyan).apply {
+            setOnClickListener {
+                val selected = saturationSeek.progress
+                status.text = "Đang yêu cầu SurfaceFlinger đổi màu…"
+                executor.execute {
+                    if (!RootAccess.status()) RootAccess.reconnectIfRemembered(this@MainActivity)
+                    val result = SystemColorControl.applySaturation(selected)
+                    runOnUiThread { status.text = result }
+                }
+            }
+        })
+        colorCard.addView(action("KHÔI PHỤC MÀU MẶC ĐỊNH", violet).apply {
+            setOnClickListener {
+                executor.execute {
+                    val result = SystemColorControl.reset()
+                    runOnUiThread { status.text = result }
+                }
+            }
+        })
         colorCard.addView(action("MỞ CÀI ĐẶT MÀU MÀN HÌNH", violet).apply {
             setOnClickListener { startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
         })
-        colorCard.addView(label("Thanh chỉnh màu chỉ mô phỏng trong preview. Chưa chỉnh màu toàn hệ thống vì API Samsung khác theo ROM.", 11f, muted))
+        colorCard.addView(label("Chỉ Bão hòa có thể gửi lệnh SurfaceFlinger để tác động hệ thống nếu ROM hỗ trợ. Vibrance, Tương phản và Độ sáng chỉ có tác dụng với ảnh mẫu.", 11f, muted))
         space(layout, 13)
 
         val boot = panel()
