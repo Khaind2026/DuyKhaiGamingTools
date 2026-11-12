@@ -77,6 +77,36 @@ object CpuProfiles {
      * and reads both back. The kernel governor and all thermal protections remain.
      * A Samsung kernel can deny sysfs writes: report that instead of claiming success.
      */
+    fun inspect(): String {
+        val path = java.io.File("/sys/devices/system/cpu/cpufreq")
+        val folders = try {
+            path.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("policy[0-9]+")) }
+                ?.sortedBy { it.name.removePrefix("policy").toIntOrNull() ?: 99 }
+                ?: emptyList()
+        } catch (_: Exception) { emptyList() }
+
+        fun read(folder: java.io.File, name: String): String =
+            try { java.io.File(folder, name).readText().trim() }
+            catch (_: Exception) { "không đọc được" }
+
+        val rows = folders.take(16).map { folder ->
+            val ceiling = read(folder, "cpuinfo_max_freq")
+            val currentMax = read(folder, "scaling_max_freq")
+            val currentMin = read(folder, "scaling_min_freq")
+            val current = read(folder, "scaling_cur_freq")
+            val governor = read(folder, "scaling_governor")
+            folder.name + " • MIN " + currentMin + " / MAX " + currentMax +
+                " / STOCK " + ceiling + " / CUR " + current +
+                " kHz • governor " + governor
+        }
+        if (rows.isEmpty()) {
+            return "Kernel không công khai chính sách CPU. Không thể xác nhận khóa xung."
+        }
+        return rows.joinToString("\n") +
+            "\nChú ý: MAX=STOCK chỉ có nghĩa trần xung được phép, KHÔNG có nghĩa CPU đang " +
+            "chạy liên tục ở xung đó. Kernel và điều tiết nhiệt vẫn quyết định xung thực tế."
+    }
+
     fun resetCommand(): String {
         val d = 36.toChar()
         return """
