@@ -2,11 +2,12 @@ name: Build DuyKhai Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, "codex/**"]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: duykhaidex-build-main
+  group: duykhaidex-${{ github.workflow }}-${{ github.ref }}-recovery
   cancel-in-progress: true
 
 permissions:
