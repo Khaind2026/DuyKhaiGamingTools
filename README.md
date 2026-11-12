@@ -1,4 +1,4 @@
-# DuyKhaiDex Gaming Tools v0.6.1
+# DuyKhaiDex Gaming Tools v0.7.0
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
 
@@ -96,3 +96,14 @@ No ads, telemetry or Internet permission.
 - HUD reads sensor values every 1.5 seconds while enabled, keeps HDMI refresh rate distinct from FPS, displays sensor name/source, and records overlay permission/launch failures in local HUD diagnostics.
 - Realtime CPU page includes sensor values, their names and an optional selection; no invented values on unsupported kernels.
 - Android GitHub Actions must compile APK, pass tests and lint before publishing v0.6.1. Physical Samsung UI/Root testing remains necessary.
+
+
+## v0.7.0 – Color controls and compact navigation
+- Replaced the home dashboard's large 3-column card grid with one horizontally scrollable row of compact native Android navigation tiles.
+- Removed the redundant **Quản Lý Game** menu and its screen. Package selection remains available under **Tối Ưu Game**, so presets are not lost.
+- Color Lab now exposes a real **apply / restore global saturation** action backed by AOSP SurfaceFlinger's Binder transaction 1022, clamped to 0–200% and restricted to already authorized Root/Shizuku. The app checks the returned Binder Parcel and reports when the call is rejected. **A successful call is not proof Samsung One UI changed the displayed color.** One UI or DeX can ignore/override it. A shortcut to Samsung Display > Screen mode supports official Vivid / Natural and white-balance controls.
+- Removed misleading claims that vibrance, contrast or brightness sliders modify the entire system. The older Advanced page marks those sliders as preview-only.
+- Separate **PIN DEMO 999%** toggle in Settings. It displays a clearly marked demonstration label **inside the DuyKhaiDex app only**. It does NOT spoof Android's actual battery percentage, charging status, battery warnings or power-management logic.
+- Added **CPU frequency diagnostics** showing cpufreq scaling min/max, the factory ceiling, current frequency and governor so a device reporting a rejected or ineffective stock-max profile is easy to diagnose. The Super label has been clarified to **MAX STOCK**.
+- No thermal limit bypass, false CPU temperature injection, battery service spoof, or unsafe forced overclock. All manufacturer thermal protection remains enabled.
+- Build debug APK and run test/lint in GitHub Actions. Hardware-level changes still require real Samsung testing.
