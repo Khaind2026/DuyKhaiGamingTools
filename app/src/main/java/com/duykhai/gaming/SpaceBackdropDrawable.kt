@@ -46,7 +46,7 @@ class SpaceBackdropDrawable : Drawable() {
         if (w <= 0f || h <= 0f) return
         paint.shader = LinearGradient(
             0f, 0f, w, max(h, 800f),
-            intArrayOf(Color.rgb(11, 13, 38), Color.rgb(31, 13, 62), Color.rgb(6, 17, 39), Color.rgb(19, 8, 42)),
+            intArrayOf(Color.rgb(20, 7, 55), Color.rgb(42, 13, 90), Color.rgb(6, 13, 46), Color.rgb(42, 7, 85)),
             floatArrayOf(0f, .25f, .60f, 1f),
             Shader.TileMode.CLAMP
         )
@@ -58,14 +58,14 @@ class SpaceBackdropDrawable : Drawable() {
             val px = (((i * 83 + 17) % 353) / 353f) * w
             val py = (((i * 223 + 49) % 997) / 997f) * h
             paint.color = if (i % 5 == 0) Color.argb(150, 232, 121, 255) else
-                Color.argb(110 + (i * 7 % 110), 151, 227, 255)
+                Color.argb(145 + (i * 7 % 100), 172, 235, 255)
             canvas.drawCircle(px, py, if (i % 9 == 0) 2.4f else 1.2f, paint)
         }
         paint.color = Color.argb(42, 91, 162, 255)
         canvas.drawCircle(w * .84f, 195f, 100f, paint)
         paint.color = Color.argb(65, 63, 206, 255)
         canvas.drawCircle(w * .84f, 195f, 76f, paint)
-        paint.color = Color.argb(40, 242, 65, 212)
+        paint.color = Color.argb(66, 242, 65, 212)
         canvas.drawCircle(w * .11f, h * .80f, 150f, paint)
         crew(canvas, w - 135f, 72f, .75f, Color.rgb(255, 70, 119))
         crew(canvas, 7f, h - 175f, .72f, Color.rgb(79, 212, 243))

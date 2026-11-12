@@ -27,18 +27,18 @@ object NeonUi {
 
     fun card(c: Context, edge: Int = purple): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(
-            Color.rgb(19, 28, 61), Color.rgb(9, 13, 38), Color.rgb(25, 11, 45)
+            Color.rgb(45, 20, 106), Color.rgb(11, 11, 41), Color.rgb(46, 11, 93)
         )).apply {
             cornerRadius = dp(c, 17).toFloat()
-            setStroke(dp(c, 1), edge)
+            setStroke(dp(c, 2), edge)
         }
 
     fun button(c: Context): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(
-            Color.rgb(212, 77, 255), Color.rgb(129, 18, 209), Color.rgb(80, 23, 152)
+            Color.rgb(235, 103, 255), Color.rgb(162, 20, 239), Color.rgb(108, 13, 189)
         )).apply {
             cornerRadius = dp(c, 11).toFloat()
-            setStroke(dp(c, 1), Color.rgb(239, 152, 255))
+            setStroke(dp(c, 2), Color.rgb(255, 182, 255))
         }
 
     fun text(c: Context, value: String, sp: Float, color: Int = white, bold: Boolean = false): TextView =

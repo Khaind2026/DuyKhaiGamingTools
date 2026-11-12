@@ -1,4 +1,4 @@
-# DuyKhaiDex Gaming Tools v0.5.0
+# DuyKhaiDex Gaming Tools v0.6.0
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
 
@@ -72,3 +72,17 @@ No ads, telemetry or Internet permission.
 - Color Lab preview is experimental; color sliders cannot modify Samsung's whole-screen colors without device-specific code.
 - Root CPU ECO/BALANCED/SUPER remains confined to supported stock min/max limits with manufacturer thermal safety preserved.
 - The dashboard visuals intentionally recreate the **theme** of the supplied concept while keeping native Android accessibility and working buttons; exact rendered illustration, fonts and shading can vary.
+
+## v0.6.0 – Root shell, external monitor, Fold/Flip and orientation controls
+- Reusable persistent `su` command shell replaces a fresh `su -c` for each FPS/CPU/display command, eliminating repeated privilege requests caused by the app while the process and shell remain alive. The Root grant remains controlled by Magisk/KernelSU/SukiSU and their notifications/settings. Root permission is requested explicitly from the Root tile; allow persistent permission in your trusted root manager if desired.
+- Each command runs in a subshell with its exit status recorded; failure of a Samsung-only command no longer kills the parent Root shell.
+- CPU reset now restores stock `cpuinfo_min_freq` and `cpuinfo_max_freq`, not SUPER mode.
+- New fold-state screen inspects `cmd device_state print-states`, then offers **cover/outer** versus **inner/main** only when the ROM reports matching supported state IDs. An unconfirmed override is scheduled to reset after 20 seconds while the activity is alive. This is experimental; keep ADB recovery accessible. It cannot repair broken or physically removed panels.
+- New rotation page uses WindowManager's `user-rotation` and orientation override for the default or detected external display, with a reset option. Some Samsung/DeX apps may override rotation.
+- Screen size page adds FHD 1920×1080, 2K 2560×1440 and 4K 3840×2160 logical presets. These do not increase panel resolution.
+- FPS HUD now uses frameless, draggable text; user can control size/opacity and turn it off from the ongoing notification.
+- External HDMI/DeX FPS uses SurfaceFlinger layer statistics only when an external-tagged layer can be identified. The **display refresh rate (Hz) is shown separately** and must never be substituted for actual presented FPS. Some ROMs do not expose external-layer statistics.
+- Brighter neon/cosmic UI colors throughout.
+- CPU thermal safety remains enabled. Display state requests, per-display rotation, refresh rate and external FPS require compatible firmware/kernel and test hardware.
+
+**Compatibility:** No reliable universal solution to make an unsupported game permit 144/165 FPS or to override game/device compatibility checks by changing a device identifier. This release does not claim to spoof RMX5070 or bypass app identification.
