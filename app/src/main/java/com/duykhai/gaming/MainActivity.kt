@@ -225,8 +225,8 @@ object DisplayRoot {
             val output = result.getOrElse(1) { "Không có phản hồi" }
             val ok = result.getOrNull(0) == "0" && output.contains("DK_APPLIED") &&
                 !Regex("(?i)(error:|exception|not supported|invalid|unknown command)").containsMatchIn(output)
-            if (result.getOrNull(0) != "0" && output.contains("permission denied", true))
-                RootAccess.invalidate()
+            // A kernel/sysfs Permission denied is a command failure, not a lost SU grant.
+            // Only the RootSession transport may mark its connection unavailable.
             return Result(ok, (if (ok) "✓ Root (một phiên): " else "✗ Root: ") +
                 output.replace("DK_APPLIED", "Đã gửi lệnh").take(1200))
         }
