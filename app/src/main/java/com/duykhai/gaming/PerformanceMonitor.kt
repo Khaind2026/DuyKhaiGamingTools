@@ -143,7 +143,7 @@ object PerformanceMonitor {
     internal fun parseThermalService(output: String): Float? {
         // Android's thermalservice dump includes Temperature{mValue=..., mType=0, mName=...}
         // mType=0 is CPU, in Celsius; battery / skin sensors must not be mislabeled.
-        val values = Regex("""(?i)(?:mValue|value)\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)[^\\n]{0,150}?(?:mType|type)\\s*=\\s*(?:0|CPU)\\b""")
+        val values = Regex("""(?i)(?:mValue|value)\s*=\s*([0-9]+(?:\.[0-9]+)?)[^\n]{0,150}?(?:mType|type)\s*=\s*(?:0|CPU)\b""")
             .findAll(output).mapNotNull { it.groupValues[1].toFloatOrNull() }
             .filter { it in 0f..110f }.toList()
         return values.maxOrNull()

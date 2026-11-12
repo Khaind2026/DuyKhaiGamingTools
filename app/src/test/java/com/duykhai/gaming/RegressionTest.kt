@@ -16,6 +16,7 @@ class RegressionTest {
         try {
             val policy = root.resolve("policy0").apply { mkdir() }
             policy.resolve("cpuinfo_max_freq").writeText("3000000")
+            policy.resolve("cpuinfo_min_freq").writeText("1000000")
             policy.resolve("scaling_min_freq").writeText("1000000")
             policy.resolve("scaling_max_freq").writeText("3000000")
             policy.resolve("scaling_available_frequencies").writeText("1000000 1800000 2400000 3000000")
@@ -26,7 +27,7 @@ class RegressionTest {
                 assertEquals(output, 0, process.waitFor())
                 assertEquals(expected, policy.resolve("scaling_max_freq").readText().trim())
                 assertTrue(output.contains("actual=$expected"))
-                assertEquals("1000000", policy.resolve("scaling_min_freq").readText())
+                assertEquals(if (mode == 3) "1800000" else "1000000", policy.resolve("scaling_min_freq").readText())
             }
         } finally { root.deleteRecursively() }
     }

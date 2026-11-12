@@ -32,6 +32,22 @@ class MonitorParsingTest {
         assertNull(PerformanceMonitor.calculateFps(latency, 20_000_000_000L))
     }
 
+    @Test fun selectsGamePresentationLayerNotDisplayHz() {
+        val report = """
+          layerName = SurfaceView[com.example.game/com.example.Main]#1
+          averageFPS = 112.5
+          layerName = com.other.app#2
+          averageFPS = 165.0
+        """.trimIndent()
+        assertEquals(112.5f, PerformanceMonitor.averageFpsForPackage(report, "com.example.game")!!, .01f)
+        assertNull(PerformanceMonitor.averageFpsForPackage(report, "com.not.installed"))
+    }
+
+    @Test fun readsThermalHalCpuOnly() {
+        val dump = "Temperature{mValue=47.5, mType=0, mName=cpu-0, mStatus=0}"
+        assertEquals(47.5f, PerformanceMonitor.parseThermalService(dump)!!, .01f)
+    }
+
     @Test fun rejectsUnrealisticTemperatures() {
         assertNull(PerformanceMonitor.normalizeTemperature(150000))
         assertEquals(43.5f, PerformanceMonitor.normalizeTemperature(43500)!!, 0.1f)

@@ -1,4 +1,4 @@
-# DuyKhaiDex Gaming Tools v0.3
+# DuyKhaiDex Gaming Tools v0.4
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
 
@@ -48,3 +48,15 @@ No ads, telemetry or Internet permission.
 - Removed numeric prefixes from all major in-app section headings.
 - Added Samsung DeX sales contact **Zalo 0862134811**, with an optional contact button.
 - May not display all sensors on Samsung One UI 7/8 without root/kernel access. This is a diagnostic tool, not a hardware temperature guarantee.
+
+## v0.4 – Display/monitor controls
+- Independent screen-Hz preference and GameManager FPS settings. Optional `cmd display set-user-preferred-display-mode` only for modes physically reported by the internal display, with command read-back. The OS may still override it (power/thermal/game policy).
+- Custom logical screen width and height (480–3840 pixels, up to 10 MP) with custom DPI input (120–800). Tap reset or use ADB recovery if invalid.
+- Explicit, once-per-process ROOT permission request: the app no longer probes `su` on each resume/monitor tick. To avoid repeated manager prompts, choose permanent authorization in Magisk/KernelSU and grant only the app you trust.
+- FPS uses AOSP SurfaceFlinger `--timestats` on the selected game surface and reports lack of data instead of substituting screen refresh rate. CPU sensor fallback uses `dumpsys thermalservice`; readings vary by device/kernel.
+- Floating HUD has live size control 60–160% via app slider or HUD +/- buttons. Approximate FPS is an average over a short recent sampling period, not instantaneous render FPS.
+- CPU ECO/BALANCED/SUPER adjusts read-back verified stock-range min/max policies without disabling any thermal management. Not supported on all Samsung devices.
+- Original offline neon galaxy with space-crewmate illustrations. Game visuals and original branding remain unchanged.
+- Retained SamsungDeX support Zalo: 0862134811.
+
+**No manufacturer-exceeding overclock or thermal safety bypass; no guarantee of 144/165/200 Hz or game FPS.**
