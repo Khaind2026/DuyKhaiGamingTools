@@ -53,6 +53,8 @@ class DashboardActivity : Activity() {
     private var tempValue: TextView? = null
     private var clockValue: TextView? = null
     private var feedback: TextView? = null
+    private var foldRollback: Runnable? = null
+    private var foldStates: List<FoldState> = emptyList()
 
     private val tick = object : Runnable {
         override fun run() {
@@ -60,11 +62,18 @@ class DashboardActivity : Activity() {
             if (sampling.compareAndSet(false, true)) {
                 val pkg = Profiles.load(this@DashboardActivity).gamePackage
                 worker.execute {
-                    val sample = try { PerformanceMonitor.sample(pkg, RootAccess.status()) }
-                        catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không có dữ liệu") }
+                    val useExternal = getSharedPreferences("hud_prefs", MODE_PRIVATE)
+                        .getString("source", "external") != "game"
+                    val sample = try {
+                        PerformanceMonitor.sample(if (useExternal) "" else pkg, RootAccess.status())
+                    } catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không có dữ liệu") }
+                    val outer = if (useExternal) try {
+                        PerformanceMonitor.external(this@DashboardActivity, RootAccess.status())
+                    } catch (_: Exception) { null } else null
                     runOnUiThread {
                         if (page == "home") {
-                            fpsValue?.text = sample.fps?.let {
+                            val visibleFps = if (useExternal) outer?.presentedLayerFps else sample.fps
+                            fpsValue?.text = visibleFps?.let {
                                 String.format(Locale.US, "%.0f", it)
                             } ?: "—"
                             tempValue?.text = sample.temperatureC?.let {
@@ -302,7 +311,7 @@ class DashboardActivity : Activity() {
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
             addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
-            addView(label("Gaming Tools    v0.5.0", 17f, ui.purple, true))
+            addView(label("Gaming Tools    v0.6.0", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label("⚙", 27f, ui.white, true).apply {
@@ -324,7 +333,7 @@ class DashboardActivity : Activity() {
             addView(label(title, 12f, ui.white, true).apply { gravity = Gravity.CENTER })
             addView(label(initially, 23f, ui.green, true).apply { gravity = Gravity.CENTER })
         }
-        val a = statItem("FPS", "—")
+        val a = statItem("FPS HDMI", "—")
         val b = statItem("CPU", "—")
         val c = statItem("CPU CLOCK", "—")
         fpsValue = a.getChildAt(1) as TextView
@@ -334,7 +343,9 @@ class DashboardActivity : Activity() {
         statRow.addView(b, LinearLayout.LayoutParams(0, dp(57), 1f))
         statRow.addView(c, LinearLayout.LayoutParams(0, dp(57), 1f))
         statPanel.addView(statRow)
-        root.addView(label("FPS game đo từ layer (nếu được hỗ trợ) • không phải Hz", 10.5f, ui.muted))
+        root.addView(label("FPS HDMI lấy từ layer màn ngoài (nếu có); không lấy Hz làm FPS.", 10.5f, ui.muted))
+        val externalHint = label("Chọn HUD Theo Dõi để xem Hz màn ngoài và chọn nguồn số liệu.", 11f, ui.cyan)
+        root.addView(externalHint)
         root.addView(blank(9))
 
         val features = arrayOf(
@@ -346,7 +357,9 @@ class DashboardActivity : Activity() {
             Triple("HUD Theo Dõi", 0xFFE8EFFF.toInt(), "hud"),
             Triple("Quản Lý\nGame", 0xFF287EFF.toInt(), "games"),
             Triple("Công Cụ\nKhác", 0xFF8A38FF.toInt(), "other"),
-            Triple("Cài Đặt", 0xFF15C4FA.toInt(), "settings")
+            Triple("Cài Đặt", 0xFF15C4FA.toInt(), "settings"),
+            Triple("Fold / Flip", 0xFFEA4DFF.toInt(), "fold"),
+            Triple("Buộc Xoay", 0xFF65E5FF.toInt(), "rotate")
         )
         features.toList().chunked(3).forEach { pack ->
             val gridRow = row()
@@ -403,6 +416,8 @@ class DashboardActivity : Activity() {
             "games" -> renderGames()
             "other" -> renderOther()
             "settings" -> renderSettings()
+            "fold" -> renderFold()
+            "rotate" -> renderRotation()
         }
     }
 
@@ -511,6 +526,30 @@ class DashboardActivity : Activity() {
         groupTitle(settings, "DPI")
         val dpi = number(p.dpi, "320")
         settings.addView(dpi)
+        val formats = panel(body, ui.purple)
+        groupTitle(formats, "KÍCH THƯỚC ĐỊNH DẠNG SẴN", ui.cyan)
+        val formatRow = row()
+        val layouts = arrayOf(
+            Triple("FHD", 1920, 1080),
+            Triple("2K", 2560, 1440),
+            Triple("4K", 3840, 2160)
+        )
+        layouts.forEach { (name, w, h) ->
+            val presetButton = label(name, 14f, ui.white, true).apply {
+                gravity = Gravity.CENTER
+                background = ui.card(this@DashboardActivity, ui.cyan)
+                setOnClickListener {
+                    width.setText(w.toString())
+                    height.setText(h.toString())
+                    custom.isChecked = true
+                }
+            }
+            formatRow.addView(presetButton,
+                LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(5) })
+        }
+        formats.addView(formatRow)
+        note(formats, "FHD = 1920×1080 • 2K = 2560×1440 • 4K = 3840×2160. Kích thước logic, không tăng khả năng panel.")
+
         val presets = panel(body, ui.cyan)
         groupTitle(presets, "TỶ LỆ NHANH", ui.cyan)
         val ratioRow = row()
@@ -593,6 +632,18 @@ class DashboardActivity : Activity() {
         val body = begin("hud", "HUD Theo Dõi", ui.cyan)
         val pref = getSharedPreferences("hud_prefs", MODE_PRIVATE)
         val c = panel(body, ui.purple)
+        groupTitle(c, "NGUỒN ĐO FPS / MÀN HÌNH")
+        val source = spinner(arrayOf("Màn ngoài HDMI / DeX (mặc định)", "Layer game đang chạy"),
+            if (pref.getString("source", "external") == "game") 1 else 0)
+        c.addView(source)
+        source.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?,
+                position: Int, id: Long) {
+                pref.edit().putString("source", if (position == 0) "external" else "game").apply()
+            }
+        }
+        note(c, "Chế độ HDMI luôn hiện Hz nếu màn được nhận; FPS ngoài chỉ hiện khi ROM xuất timestats của layer ngoài.")
         groupTitle(c, "THÔNG SỐ HIỂN THỊ")
         fun toggle(key: String, title: String): CheckBox = CheckBox(this).apply {
             text = title; setTextColor(ui.white)
@@ -602,7 +653,7 @@ class DashboardActivity : Activity() {
         c.addView(toggle("fps", "FPS Game"))
         c.addView(toggle("temp", "Nhiệt độ CPU"))
         c.addView(toggle("clock", "Xung nhịp CPU"))
-        note(c, "GPU/load và nhiệt độ khác sẽ chỉ hiển thị nếu có nguồn dữ liệu tương thích.")
+        note(c, "HUD chỉ có chữ số, không có khung. Mở app hoặc thông báo để tắt HUD. GPU chỉ hiện nếu có API hỗ trợ.")
         val config = panel(body, ui.cyan)
         groupTitle(config, "KÍCH THƯỚC VÀ ĐỘ TRONG SUỐT")
         slider(config, "Kích thước HUD (%)", 60, 160, pref.getInt("scale", 100)) {
@@ -729,7 +780,9 @@ class DashboardActivity : Activity() {
         val body = begin("other", "Công Cụ Khác", ui.purple)
         val c = panel(body)
         groupTitle(c, "TÙY CHỈNH NÂNG CAO")
-        note(c, "Các màn điều khiển nâng cao trước đây vẫn được giữ lại.")
+        note(c, "Giao diện cũ vẫn được giữ, cùng các công cụ màn hình Fold/Flip.")
+        action(c, "CHUYỂN MÀN HÌNH FOLD / FLIP") { renderFold() }
+        action(c, "BUỘC XOAY MÀN HÌNH") { renderRotation() }
         action(c, "MỞ GIAO DIỆN CŨ / NÂNG CAO") {
             startActivity(Intent(this, MainActivity::class.java))
         }
@@ -803,7 +856,7 @@ class DashboardActivity : Activity() {
         val about = panel(body, ui.cyan)
         groupTitle(about, "THÔNG TIN ỨNG DỤNG")
         about.addView(label("DuyKhaiDex Gaming Tools", 16f, ui.white, true))
-        about.addView(label("Phiên bản 0.5.0 • Giao diện Space Neon", 12f, ui.muted))
+        about.addView(label("Phiên bản 0.6.0 • Space Neon Plus", 12f, ui.muted))
         about.addView(label("Samsung DeX • Zalo 0862134811", 14f, ui.green, true))
         action(about, "MỞ ZALO") { openZalo() }
     }
