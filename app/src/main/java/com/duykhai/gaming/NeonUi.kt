@@ -164,7 +164,7 @@ class CrewHeroView(context: Context) : View(context) {
     private fun drawCrew(canvas: Canvas, x: Float, y: Float, scale: Float, suit: Int, crown: Boolean) {
         canvas.save()
         canvas.translate(x, y)
-        canvas.scale(scale * 100f, scale * 100f)
+        canvas.scale(scale, scale)
         p.color = Color.rgb(8, 10, 31)
         canvas.drawRoundRect(5f, 7f, 88f, 104f, 30f, 30f, p)
         p.color = suit
