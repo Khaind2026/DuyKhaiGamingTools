@@ -50,6 +50,10 @@ import kotlin.math.roundToInt
 
 data class Profile(
     val resolution: Int = 0,
+    val customSize: Boolean = false,
+    val customWidth: Int = 0,
+    val customHeight: Int = 0,
+    val hardHz: Boolean = false,
     val ratio: Int = 0,
     val dpiEnabled: Boolean = false,
     val dpi: Int = 420,
@@ -70,6 +74,10 @@ object Profiles {
         val p = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
         return Profile(
             resolution = p.getInt("resolution", 0),
+            customSize = p.getBoolean("customSize", false),
+            customWidth = p.getInt("customWidth", 0),
+            customHeight = p.getInt("customHeight", 0),
+            hardHz = p.getBoolean("hardHz", false),
             ratio = p.getInt("ratio", 0),
             dpiEnabled = p.getBoolean("dpiEnabled", false),
             dpi = p.getInt("dpi", 420),
@@ -87,6 +95,10 @@ object Profiles {
     fun save(ctx: Context, c: Profile) {
         ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE).edit()
             .putInt("resolution", c.resolution)
+            .putBoolean("customSize", c.customSize)
+            .putInt("customWidth", c.customWidth)
+            .putInt("customHeight", c.customHeight)
+            .putBoolean("hardHz", c.hardHz)
             .putInt("ratio", c.ratio)
             .putBoolean("dpiEnabled", c.dpiEnabled)
             .putInt("dpi", c.dpi)
@@ -112,11 +124,16 @@ object DisplayRoot {
 
     fun apply(ctx: Context, p: Profile, boot: Boolean = false): Result {
         if (p.cpuMode !in 0..3) return Result(false, "CPU profile không hợp lệ")
-        val root = RootAccess.status()
+        val root = if (boot) RootAccess.request() else RootAccess.status()
         if (!root && (boot || !CommandRunner.ready())) return Result(false, "Cần Root hoặc Shizuku shell đã kết nối")
         if (!root && p.cpuMode != 0) return Result(false, "CPU cần Root; chọn CPU Không thay đổi để dùng Shizuku")
         val commands = mutableListOf<String>()
-        if (p.resolution != 0 || p.ratio != 0) {
+        if (p.customSize) {
+            if (p.customWidth !in 480..3840 || p.customHeight !in 480..3840 ||
+                p.customWidth.toLong() * p.customHeight.toLong() > 10_000_000L)
+                return Result(false, "Kích thước tùy chỉnh: mỗi cạnh 480–3840, tối đa 10 triệu điểm ảnh")
+            commands.add("wm size " + p.customWidth + "x" + p.customHeight)
+        } else if (p.resolution != 0 || p.ratio != 0) {
             if (p.resolution !in setOf(0, 720, 1080, 1440) || p.ratio !in 0..3)
                 return Result(false, "Độ phân giải hoặc tỷ lệ không hợp lệ")
             val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -136,14 +153,29 @@ object DisplayRoot {
             commands.add("wm size " + value)
         }
         if (p.dpiEnabled) {
-            if (p.dpi !in 160..640) return Result(false, "DPI phải từ 160 đến 640")
+            if (p.dpi !in 120..800) return Result(false, "DPI tùy chỉnh phải từ 120 đến 800")
             commands.add("wm density " + p.dpi)
         }
         if (p.hz != 0) {
             if (p.hz !in hzAllowed) return Result(false, "Hz không hợp lệ")
             commands.add("settings put system peak_refresh_rate " + p.hz + ".0")
             commands.add("settings put system min_refresh_rate " + p.hz + ".0")
+            if (p.hardHz) {
+                val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                val display = dm.getDisplay(Display.DEFAULT_DISPLAY)
+                    ?: return Result(false, "Không đọc được màn hình nội bộ")
+                val target = display.supportedModes.firstOrNull {
+                    kotlin.math.abs(it.refreshRate - p.hz.toFloat()) < 0.5f &&
+                    it.physicalWidth == display.mode.physicalWidth &&
+                    it.physicalHeight == display.mode.physicalHeight
+                } ?: return Result(false, "Màn nội bộ không hỗ trợ " + p.hz +
+                    "Hz ở chế độ vật lý hiện tại. Không thể khóa bằng phần mềm.")
+                commands.add("cmd display set-user-preferred-display-mode " +
+                    target.physicalWidth + " " + target.physicalHeight + " " +
+                    target.refreshRate + " 0")
+            }
         }
+
         if (p.fps != 0) {
             if (p.fps !in fpsAllowed || !gamePattern.matches(p.gamePackage))
                 return Result(false, "Chọn FPS và nhập đúng package game (com.example.game)")
@@ -153,9 +185,16 @@ object DisplayRoot {
         }
         if (commands.isEmpty() && p.cpuMode == 0) return Result(false, "Chưa chọn thiết lập nào")
         val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands, root)
+        val modeReadback = if (p.hz != 0 && p.hardHz && displayResult.ok) {
+            val value = CommandRunner.run("cmd display get-user-preferred-display-mode 0", root)
+            if (value.getOrNull(0) == "0") "
+Hz preferred: " + value.getOrNull(1).orEmpty()
+                else "
+Không đọc lại được preferred Hz; kernel có thể bỏ qua"
+        } else ""
         val cpuResult = if (p.cpuMode == 0) Result(true, "CPU giữ nguyên")
                         else runCommands(listOf(CpuProfiles.command(p.cpuMode)), true)
-        return Result(displayResult.ok && cpuResult.ok, displayResult.info + " • CPU: " + cpuResult.info)
+        return Result(displayResult.ok && cpuResult.ok, displayResult.info + modeReadback + " • CPU: " + cpuResult.info)
     }
 
     fun reset(p: Profile): Result {
@@ -169,7 +208,12 @@ object DisplayRoot {
         )
         if (gamePattern.matches(p.gamePackage)) commands.add("cmd game reset " + p.gamePackage)
         if (p.cpuMode != 0) commands.add(CpuProfiles.command(3))
-        return runCommands(commands, root)
+        val result = runCommands(commands, root)
+        // Best effort: unsupported Samsung firmware may ignore this command.
+        if (p.hardHz && (root || CommandRunner.ready())) {
+            CommandRunner.run("cmd display clear-user-preferred-display-mode 0", root)
+        }
+        return result
     }
 
     private fun runCommands(commands: List<String>, root: Boolean): Result {
