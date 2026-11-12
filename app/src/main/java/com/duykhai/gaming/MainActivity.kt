@@ -202,7 +202,7 @@ object DisplayRoot {
         )
         if (gamePattern.matches(p.gamePackage)) commands.add("cmd game reset " + p.gamePackage)
         if (p.hardHz) commands.add("cmd display clear-user-preferred-display-mode 0 || true")
-        if (p.cpuMode != 0) commands.add(CpuProfiles.command(3))
+        if (p.cpuMode != 0) commands.add(CpuProfiles.resetCommand())
         return runCommands(commands, root)
     }
 
@@ -210,7 +210,17 @@ object DisplayRoot {
         if (Thread.currentThread().isInterrupted) return Result(false, "Đã hủy")
         if (root) {
             // One root shell per APPLY/RESET instead of one permission request per command.
-            val script = "set -e\n" + commands.joinToString("\n") + "\necho DK_APPLIED"
+            val script = buildString {
+                append("overall=0\n")
+                commands.forEachIndexed { index, cmd ->
+                    append("(\n").append(cmd).append("\n)\n")
+                    append("rc=$?\n")
+                    append("echo DK_CMD_").append(index).append("_RESULT=$rc\n")
+                    append("[ \"$rc\" -eq 0 ] || overall=1\n")
+                }
+                append("echo DK_APPLIED\n")
+                append("[ \"$overall\" -eq 0 ]\n")
+            }
             val result = CommandRunner.run(script, true)
             val output = result.getOrElse(1) { "Không có phản hồi" }
             val ok = result.getOrNull(0) == "0" && output.contains("DK_APPLIED") &&

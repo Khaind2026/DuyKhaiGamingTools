@@ -64,6 +64,30 @@ object CpuProfiles {
      * and reads both back. The kernel governor and all thermal protections remain.
      * A Samsung kernel can deny sysfs writes: report that instead of claiming success.
      */
+    fun resetCommand(): String {
+        val d = 36.toChar()
+        return """
+            changed=0; failed=0
+            for p in /sys/devices/system/cpu/cpufreq/policy*; do
+              [ -r "${d}p/cpuinfo_min_freq" ] && [ -r "${d}p/cpuinfo_max_freq" ] || continue
+              min=${d}(cat "${d}p/cpuinfo_min_freq")
+              max=${d}(cat "${d}p/cpuinfo_max_freq")
+              [ -w "${d}p/scaling_min_freq" ] && [ -w "${d}p/scaling_max_freq" ] || {
+                failed=${d}((failed+1)); continue;
+              }
+              echo "${d}min" > "${d}p/scaling_min_freq" 2>/dev/null
+              echo "${d}max" > "${d}p/scaling_max_freq" 2>/dev/null
+              actualMin=${d}(cat "${d}p/scaling_min_freq")
+              actualMax=${d}(cat "${d}p/scaling_max_freq")
+              if [ "${d}actualMin" = "${d}min" ] && [ "${d}actualMax" = "${d}max" ]; then
+                changed=${d}((changed+1))
+              else failed=${d}((failed+1)); fi
+            done
+            echo "CPU factory min/max restored: ${d}changed; rejected: ${d}failed"
+            [ "${d}changed" -gt 0 ] && [ "${d}failed" -eq 0 ]
+        """.trimIndent()
+    }
+
     fun command(mode: Int): String {
         require(mode in 1..3)
         val ceiling = when (mode) { 1 -> 70; 2 -> 90; else -> 100 }
