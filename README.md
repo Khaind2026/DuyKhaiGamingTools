@@ -1,4 +1,4 @@
-# DuyKhaiDex Gaming Tools v0.4
+# DuyKhaiDex Gaming Tools v0.5.0
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
 
@@ -60,3 +60,15 @@ No ads, telemetry or Internet permission.
 - Retained SamsungDeX support Zalo: 0862134811.
 
 **No manufacturer-exceeding overclock or thermal safety bypass; no guarantee of 144/165/200 Hz or game FPS.**
+
+## v0.5.0 — Rebuilt native neon gaming dashboard
+- New launch activity uses a dedicated multi-screen space/gaming interface inspired by the creator's visual reference. Artwork is drawn directly in Android (not an inert screenshot).
+- Home: DuyKhaiDex branding, crown-wearing space crewmates, neon purple/blue panels, interactive 3x3 tile grid, Root/Shizuku indicators, best-effort FPS/CPU temperature/clocks and clickable Zalo 0862134811 contact banner.
+- Screens: **Tối Ưu Game**, **Khóa Hz**, **Tỷ Lệ Màn Hình**, **CPU & Hiệu Năng**, **Màu Sắc & Hiển Thị**, **HUD Theo Dõi**, **Quản Lý Game**, **Công Cụ Khác**, and **Cài Đặt**. The old advanced layout is still available under Other Tools.
+- FPS game and screen Hz live on separate pages; frequency requests are limited to physically advertised modes, no absolute hard-lock guarantee.
+- Custom width/height and DPI can be entered from the custom display screen; use reset or ADB recovery if the layout becomes unusable.
+- HUD controls now adjust 60–160% size, opacity, corner, and visible metrics, with draggable overlay and +/- controls.
+- Root requests are user-initiated and cached while the app process is alive. Assign persistent permission in Magisk / KernelSU if you wish to avoid future prompts across app starts.
+- Color Lab preview is experimental; color sliders cannot modify Samsung's whole-screen colors without device-specific code.
+- Root CPU ECO/BALANCED/SUPER remains confined to supported stock min/max limits with manufacturer thermal safety preserved.
+- The dashboard visuals intentionally recreate the **theme** of the supplied concept while keeping native Android accessibility and working buttons; exact rendered illustration, fonts and shading can vary.
