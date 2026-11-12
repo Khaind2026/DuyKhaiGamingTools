@@ -793,6 +793,140 @@ class DashboardActivity : Activity() {
         action(c, "LIÊN HỆ ZALO • 0862134811") { openZalo() }
     }
 
+
+    private fun renderFold() {
+        val body = begin("fold", "Fold / Flip • Chọn Màn", ui.purple)
+        val intro = panel(body, ui.cyan)
+        groupTitle(intro, "MÀN HÌNH NGOÀI VÀ TRONG", ui.cyan)
+        note(intro, "Chuyển trạng thái gập bằng device_state do ROM công bố. " +
+            "Màn ngoài = màn phụ/cover, màn trong = màn chính; KHÔNG phải cổng HDMI.")
+        note(intro, "Thử nghiệm trên Samsung Fold/Flip. Nếu màn đã tháo hoặc hỏng, " +
+            "lệnh có thể làm máy đen màn. Hãy chuẩn bị đường ADB để khôi phục.")
+        val stateLabel = label("Đang tìm trạng thái máy…", 12f, ui.muted)
+        intro.addView(stateLabel)
+        val commands = panel(body, ui.purple)
+        groupTitle(commands, "CHỌN MÀN HÌNH")
+        val resultLabel = label("", 12f, ui.cyan)
+        commands.addView(resultLabel)
+
+        fun requestScreen(isCover: Boolean) {
+            val state = if (isCover) FoldDisplayTools.findCover(foldStates)
+                else FoldDisplayTools.findInner(foldStates)
+            if (state == null) {
+                resultLabel.text = "ROM chưa công bố trạng thái màn này. " +
+                    "Hãy cấp Root/Shizuku và bấm cập nhật trạng thái."
+                return
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Thử đổi sang màn " + if (isCover) "ngoài" else "trong")
+                .setMessage("Thiết bị sẽ được yêu cầu chuyển sang " + state.name +
+                    ". Tự khôi phục sau 20 giây nếu không xác nhận. " +
+                    "Chỉ thử khi vẫn có cách điều khiển máy qua ADB.")
+                .setPositiveButton("THỬ") { _, _ ->
+                    resultLabel.text = "Đang thử chuyển trạng thái…"
+                    worker.execute {
+                        val result = FoldDisplayTools.forceState(state)
+                        runOnUiThread {
+                            resultLabel.text = result
+                            if (result.startsWith("Đã yêu cầu")) {
+                                foldRollback?.let { handler.removeCallbacks(it) }
+                                val rollback = Runnable {
+                                    worker.execute {
+                                        val reset = FoldDisplayTools.reset()
+                                        runOnUiThread { if (page == "fold") resultLabel.text = reset }
+                                    }
+                                }
+                                foldRollback = rollback
+                                handler.postDelayed(rollback, 20_000L)
+                                if (page == "fold") {
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Màn hình có hoạt động?")
+                                        .setMessage("Bấm GIỮ nếu màn đúng. Nếu không, app sẽ tự trả trạng thái cũ sau 20 giây.")
+                                        .setPositiveButton("GIỮ") { _, _ ->
+                                            handler.removeCallbacks(rollback)
+                                            if (foldRollback === rollback) foldRollback = null
+                                            resultLabel.text = "Đã giữ trạng thái " + state.name
+                                        }
+                                        .setNegativeButton("KHÔI PHỤC") { _, _ ->
+                                            handler.removeCallbacks(rollback)
+                                            rollback.run()
+                                        }.show()
+                                }
+                            }
+                        }
+                    }
+                }
+                .setNegativeButton("HỦY", null)
+                .show()
+        }
+
+        action(commands, "BUỘC ƯU TIÊN MÀN NGOÀI / COVER") { requestScreen(true) }
+        action(commands, "BUỘC ƯU TIÊN MÀN TRONG / MAIN") { requestScreen(false) }
+        action(commands, "KHÔI PHỤC TRẠNG THÁI GẬP TỰ ĐỘNG") {
+            foldRollback?.let { handler.removeCallbacks(it) }
+            foldRollback = null
+            worker.execute {
+                val msg = FoldDisplayTools.reset()
+                runOnUiThread { if (page == "fold") resultLabel.text = msg }
+            }
+        }
+        action(intro, "ĐỌC LẠI CÁC TRẠNG THÁI CÓ THỂ CHỌN") {
+            stateLabel.text = "Đang kiểm tra ROM…"
+            worker.execute {
+                val (states, message) = FoldDisplayTools.getStates()
+                foldStates = states
+                runOnUiThread {
+                    if (page == "fold") stateLabel.text =
+                        message + "\n" + states.joinToString("\n") { it.id.toString() + " — " + it.name }
+                }
+            }
+        }
+        worker.execute {
+            val (states, message) = FoldDisplayTools.getStates()
+            foldStates = states
+            runOnUiThread {
+                if (page == "fold") stateLabel.text =
+                    message + "\n" + states.joinToString("\n") { it.id.toString() + " — " + it.name }
+            }
+        }
+    }
+
+    private fun renderRotation() {
+        val body = begin("rotate", "Buộc Xoay Màn Hình", ui.cyan)
+        val controls = panel(body, ui.purple)
+        groupTitle(controls, "CHỌN MÀN VÀ GÓC XOAY", ui.cyan)
+        val external = FoldDisplayTools.activeExternalDisplay(this)
+        val options = if (external != null) arrayOf(
+            "Màn hình trong/hiện tại (ID 0)",
+            "HDMI/DeX • " + external.name + " (ID " + external.displayId + ")"
+        ) else arrayOf("Màn hình trong/hiện tại (ID 0)")
+        val displays = spinner(options)
+        controls.addView(displays)
+        val angles = spinner(arrayOf("0° • Dọc mặc định", "90° • Ngang", "180° • Dọc ngược", "270° • Ngang ngược"))
+        controls.addView(angles)
+        note(controls, "Buộc xoay bằng WindowManager. Trên một số bản One UI, " +
+            "từng ứng dụng hoặc DeX có thể từ chối yêu cầu xoay.")
+        status(controls)
+        action(controls, "ÁP DỤNG XOAY MÀN HÌNH") {
+            val displayId = if (displays.selectedItemPosition == 1) external?.displayId ?: 0 else 0
+            val degrees = angles.selectedItemPosition * 90
+            feedback?.text = "Đang gửi yêu cầu xoay…"
+            val label = feedback
+            worker.execute {
+                val result = RotationTools.lock(displayId, degrees)
+                runOnUiThread { label?.text = result }
+            }
+        }
+        action(controls, "TRẢ LẠI XOAY TỰ ĐỘNG") {
+            val displayId = if (displays.selectedItemPosition == 1) external?.displayId ?: 0 else 0
+            val label = feedback
+            worker.execute {
+                val result = RotationTools.release(displayId)
+                runOnUiThread { label?.text = result }
+            }
+        }
+    }
+
     private fun renderSettings() {
         val body = begin("settings", "Cài Đặt", ui.cyan)
         val rights = panel(body, ui.purple)
