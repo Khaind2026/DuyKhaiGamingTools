@@ -215,11 +215,11 @@ object DisplayRoot {
                 commands.forEachIndexed { index, cmd ->
                     append("(\n").append(cmd).append("\n)\n")
                     append("rc=$?\n")
-                    append("echo DK_CMD_").append(index).append("_RESULT=$rc\n")
-                    append("[ \"$rc\" -eq 0 ] || overall=1\n")
+                    append("echo DK_CMD_").append(index).append("_RESULT=\$rc\n")
+                    append("[ \"\$rc\" -eq 0 ] || overall=1\n")
                 }
                 append("echo DK_APPLIED\n")
-                append("[ \"$overall\" -eq 0 ]\n")
+                append("[ \"\$overall\" -eq 0 ]\n")
             }
             val result = CommandRunner.run(script, true)
             val output = result.getOrElse(1) { "Không có phản hồi" }
