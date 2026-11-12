@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: duykhaidex-${{ github.workflow }}-${{ github.ref }}
+  group: duykhaidex-${{ github.workflow }}-${{ github.ref }}-recovery
   cancel-in-progress: true
 
 permissions:
