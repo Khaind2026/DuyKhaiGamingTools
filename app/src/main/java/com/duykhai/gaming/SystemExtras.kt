@@ -68,39 +68,54 @@ object GameCatalog {
  * CPU sysfs is not writable on many Samsung kernels, so report failures accurately.
  */
 object CpuProfiles {
+    /**
+     * The selected profile writes min+max CPU frequency caps (within stock limits)
+     * and reads both back. The kernel governor and all thermal protections remain.
+     * A Samsung kernel can deny sysfs writes: report that instead of claiming success.
+     */
     fun command(mode: Int): String {
         require(mode in 1..3)
-        val percent = when (mode) { 1 -> 70; 2 -> 90; else -> 100 }
-        val dollar = 36.toChar()
+        val ceiling = when (mode) { 1 -> 70; 2 -> 90; else -> 100 }
+        val floor = when (mode) { 1 -> 0; 2 -> 30; else -> 45 }
+        val d = 36.toChar()
         return """
-            changed=0
-            failed=0
+            changed=0; failed=0; blocked=0
             for p in /sys/devices/system/cpu/cpufreq/policy*; do
-              [ -d "${dollar}p" ] || continue
-              [ -r "${dollar}p/cpuinfo_max_freq" ] || continue
-              [ -r "${dollar}p/scaling_min_freq" ] || continue
-              [ -w "${dollar}p/scaling_max_freq" ] || { failed=${dollar}((failed+1)); continue; }
-              stock=${dollar}(cat "${dollar}p/cpuinfo_max_freq")
-              minimum=${dollar}(cat "${dollar}p/scaling_min_freq")
-              case "${dollar}stock:${dollar}minimum" in *[!0-9:]*|:*|*:) failed=${dollar}((failed+1)); continue;; esac
-              target=${dollar}((stock*$percent/100))
-              [ "${dollar}target" -ge "${dollar}minimum" ] || target=${dollar}minimum
-              if [ -r "${dollar}p/scaling_available_frequencies" ]; then
-                best=0
-                for f in ${dollar}(cat "${dollar}p/scaling_available_frequencies"); do
-                  case "${dollar}f" in *[!0-9]*|'') continue;; esac
-                  if [ "${dollar}f" -le "${dollar}target" ] && [ "${dollar}f" -ge "${dollar}minimum" ] && [ "${dollar}f" -gt "${dollar}best" ]; then best=${dollar}f; fi
+              [ -r "${d}p/cpuinfo_max_freq" ] || continue
+              [ -r "${d}p/cpuinfo_min_freq" ] || continue
+              stock=${d}(cat "${d}p/cpuinfo_max_freq")
+              lower=${d}(cat "${d}p/cpuinfo_min_freq")
+              case "${d}stock:${d}lower" in *[!0-9:]*|:*|*:) failed=${d}((failed+1)); continue;; esac
+              top=${d}((stock*$ceiling/100))
+              bottom=${d}((stock*$floor/100))
+              [ "${d}bottom" -ge "${d}lower" ] || bottom=${d}lower
+              [ "${d}bottom" -le "${d}top" ] || bottom=${d}top
+              if [ -r "${d}p/scaling_available_frequencies" ]; then
+                maxBest=0; minBest=0
+                for f in ${d}(cat "${d}p/scaling_available_frequencies"); do
+                  case "${d}f" in *[!0-9]*|'') continue;; esac
+                  if [ "${d}f" -le "${d}top" ] && [ "${d}f" -gt "${d}maxBest" ]; then maxBest=${d}f; fi
+                  if [ "${d}f" -ge "${d}bottom" ] && { [ "${d}minBest" -eq 0 ] || [ "${d}f" -lt "${d}minBest" ]; }; then minBest=${d}f; fi
                 done
-                [ "${dollar}best" -eq 0 ] || target=${dollar}best
+                [ "${d}maxBest" -gt 0 ] && top=${d}maxBest
+                [ "${d}minBest" -gt 0 ] && bottom=${d}minBest
               fi
-              if echo "${dollar}target" > "${dollar}p/scaling_max_freq" 2>/dev/null; then
-                actual=${dollar}(cat "${dollar}p/scaling_max_freq")
-                echo "${dollar}p: requested=${dollar}target actual=${dollar}actual kHz"
-                if [ "${dollar}actual" = "${dollar}target" ]; then changed=${dollar}((changed+1)); else failed=${dollar}((failed+1)); fi
-              else failed=${dollar}((failed+1)); fi
+              [ "${d}bottom" -le "${d}top" ] || bottom=${d}top
+              if [ ! -w "${d}p/scaling_max_freq" ] || [ ! -w "${d}p/scaling_min_freq" ]; then
+                echo "${d}{p##*/}: kernel denies writes"; blocked=${d}((blocked+1)); continue
+              fi
+              echo "${d}lower" > "${d}p/scaling_min_freq" 2>/dev/null
+              echo "${d}top" > "${d}p/scaling_max_freq" 2>/dev/null
+              echo "${d}bottom" > "${d}p/scaling_min_freq" 2>/dev/null
+              actualMax=${d}(cat "${d}p/scaling_max_freq")
+              actualMin=${d}(cat "${d}p/scaling_min_freq")
+              echo "${d}{p##*/}: actual=${d}actualMax min=${d}actualMin target=${d}top / ${d}bottom kHz"
+              if [ "${d}actualMax" = "${d}top" ] && [ "${d}actualMin" = "${d}bottom" ]; then
+                changed=${d}((changed+1))
+              else failed=${d}((failed+1)); fi
             done
-            echo "CPU policies applied=${dollar}changed failures=${dollar}failed (stock limits, thermal preserved)"
-            [ "${dollar}changed" -gt 0 ] && [ "${dollar}failed" -eq 0 ]
+            echo "CPU verified=${d}changed denied=${d}blocked failed=${d}failed (thermal policy enabled)"
+            [ "${d}changed" -gt 0 ] && [ "${d}failed" -eq 0 ] && [ "${d}blocked" -eq 0 ]
         """.trimIndent()
     }
 }
