@@ -1,4 +1,4 @@
-# DuyKhaiDex Gaming Tools v0.2
+# DuyKhaiDex Gaming Tools v0.3
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
 
@@ -38,3 +38,13 @@ adb shell su -c 'wm size reset; wm density reset'
 **Limits:** no device thermal-control bypass, no real overclock above manufacturer limits, no independent HDMI/DeX control, no global color changes, and no promises of 144/165 FPS. CPU thermal protection and operating-system constraints continue to apply.
 
 No ads, telemetry or Internet permission.
+
+## New in 0.3.0 — monitoring and shop contact
+- Live read-only performance dashboard in the app: estimated *game-layer presentation FPS*, CPU thermal sensor reading and CPU clock rate by frequency policy.
+- Opt-in draggable gaming **floating HUD** started from the app, with Android overlay permission and a notification while active. Stop by tapping the X on the HUD or the app button.
+- FPS uses SurfaceFlinger timestamps on the selected game layer (when Root or connected Shizuku allows access); it is NOT the chosen FPS setting, the refresh rate, or a guaranteed accurate value. The selected game must be rendering; unsupported devices show a dash (—).
+- CPU temperature is a best-effort **CPU/AP/SOC thermal-zone estimate**; different Samsung kernels expose different sensors. CPU clocks reflect `scaling_cur_freq` by policy in MHz. Unavailable values display —.
+- Monitoring runs only while the app is visible or the user-enabled floating HUD is active. HUD does not auto-start on reboot.
+- Removed numeric prefixes from all major in-app section headings.
+- Added Samsung DeX sales contact **Zalo 0862134811**, with an optional contact button.
+- May not display all sensors on Samsung One UI 7/8 without root/kernel access. This is a diagnostic tool, not a hardware temperature guarantee.

@@ -16,6 +16,9 @@ import android.graphics.Paint
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.provider.Settings
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
@@ -39,6 +42,7 @@ import android.widget.ImageView
 import rikka.shizuku.Shizuku
 import rikka.sui.Sui
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.min
@@ -242,6 +246,36 @@ class MainActivity : Activity() {
     private val violet = Color.rgb(169, 130, 255)
     private val muted = Color.rgb(161, 180, 205)
     private val executor = Executors.newSingleThreadExecutor()
+    private val monitorExecutor = Executors.newSingleThreadExecutor()
+    private val monitorHandler = Handler(Looper.getMainLooper())
+    private val monitorBusy = AtomicBoolean(false)
+    @Volatile private var monitorRoot = false
+    private lateinit var liveFps: TextView
+    private lateinit var liveTemp: TextView
+    private lateinit var liveClocks: TextView
+    private lateinit var hudButton: Button
+
+    private val monitorTick = object : Runnable {
+        override fun run() {
+            if (!::liveFps.isInitialized) return
+            if (monitorBusy.compareAndSet(false, true)) {
+                val game = gamePackage.text.toString().trim()
+                monitorExecutor.execute {
+                    val snapshot = try { PerformanceMonitor.sample(game, monitorRoot) }
+                        catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không thể đọc") }
+                    runOnUiThread {
+                        if (!isFinishing) {
+                            liveFps.text = "FPS GAME: " + PerformanceMonitor.fpsLabel(snapshot.fps)
+                            liveTemp.text = "NHIỆT ĐỘ CPU: " + PerformanceMonitor.temperatureLabel(snapshot.temperatureC)
+                            liveClocks.text = "XUNG CPU: " + PerformanceMonitor.clocksLabel(snapshot.cpuClocks)
+                        }
+                        monitorBusy.set(false)
+                    }
+                }
+            }
+            monitorHandler.postDelayed(this, 3_000L)
+        }
+    }
 
     private lateinit var resolution: Spinner
     private lateinit var ratio: Spinner
@@ -300,7 +334,7 @@ class MainActivity : Activity() {
         }
         brandRow.addView(brandLabel)
         layout.addView(brandRow)
-        layout.addView(label("SAMSUNG ROOT DISPLAY ENGINE  •  v0.2.1", 11f, muted))
+        layout.addView(label("SAMSUNG GAMING MONITOR  •  v0.3", 11f, muted))
         space(layout, 18)
         layout.addView(stat("DEVICE ONLINE", Build.MANUFACTURER.uppercase() + "  " + Build.MODEL))
         space(layout, 10)
@@ -313,9 +347,50 @@ class MainActivity : Activity() {
         layout.addView(stat("PANEL REPORTS", modes + " Hz"))
         space(layout, 14)
 
+        val monitorCard = panel()
+        layout.addView(monitorCard)
+        monitorCard.addView(label("GIÁM SÁT HIỆU NĂNG • LIVE", 16f, cyan, true))
+        space(monitorCard, 9)
+        liveFps = label("FPS GAME: —", 17f, cyan, true)
+        liveTemp = label("NHIỆT ĐỘ CPU: —", 16f, Color.WHITE, true)
+        liveClocks = label("XUNG CPU: —", 13f, violet, true)
+        monitorCard.addView(liveFps)
+        space(monitorCard, 5)
+        monitorCard.addView(liveTemp)
+        space(monitorCard, 5)
+        monitorCard.addView(liveClocks)
+        space(monitorCard, 8)
+        monitorCard.addView(label("FPS là ước tính khung hình game được trình chiếu, KHÔNG phải Hz màn hình. Muốn xem khi đang chơi, bật HUD nổi.", 11f, muted))
+        space(monitorCard, 9)
+        hudButton = action("BẬT HUD NỔI KHI CHƠI GAME", cyan)
+        monitorCard.addView(hudButton)
+        hudButton.setOnClickListener {
+            if (!Settings.canDrawOverlays(this)) {
+                status.text = "Cấp quyền hiển thị trên ứng dụng khác, sau đó bấm BẬT HUD lần nữa."
+                try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + packageName)))
+                } catch (_: Exception) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                }
+            } else if (MonitorOverlayService.active) {
+                stopService(Intent(this, MonitorOverlayService::class.java))
+                hudButton.text = "BẬT HUD NỔI KHI CHƠI GAME"
+            } else {
+                try {
+                    startForegroundService(Intent(this, MonitorOverlayService::class.java)
+                        .setAction(MonitorOverlayService.ACTION_START))
+                    hudButton.text = "TẮT HUD NỔI"
+                } catch (e: Exception) {
+                    status.text = "Không thể bật HUD: " + e.message
+                }
+            }
+        }
+        space(layout, 14)
+
         val privilegeCard = panel()
         layout.addView(privilegeCard)
-        privilegeCard.addView(label("00  QUYỀN ĐIỀU KHIỂN", 16f, cyan, true))
+        privilegeCard.addView(label("QUYỀN ĐIỀU KHIỂN", 16f, cyan, true))
         space(privilegeCard, 8)
         rootLed = label("● ROOT: ĐANG KIỂM TRA", 14f, muted, true)
         shizukuLed = label("● SHIZUKU: ĐANG KIỂM TRA", 14f, muted, true)
@@ -342,7 +417,7 @@ class MainActivity : Activity() {
 
         val screen = panel()
         layout.addView(screen)
-        screen.addView(label("01  DISPLAY OVERRIDE", 16f, cyan, true))
+        screen.addView(label("DISPLAY OVERRIDE", 16f, cyan, true))
         space(screen, 10)
         screen.addView(label("Độ phân giải logic / cạnh ngắn", 13f, muted))
         resolution = selector(arrayOf("Không đổi", "720p", "1080p", "1440p"))
@@ -374,7 +449,7 @@ class MainActivity : Activity() {
 
         val performance = panel()
         layout.addView(performance)
-        performance.addView(label("02  GAMING PERFORMANCE", 16f, violet, true))
+        performance.addView(label("GAMING PERFORMANCE", 16f, violet, true))
         space(performance, 10)
         performance.addView(label("Hz yêu cầu (giới hạn bởi màn hình/ROM)", 13f, muted))
         hz = selector(arrayOf("Không đổi", "60 Hz", "90 Hz", "120 Hz", "144 Hz", "165 Hz", "200 Hz"))
@@ -409,7 +484,7 @@ class MainActivity : Activity() {
 
         val cpuCard = panel()
         layout.addView(cpuCard)
-        cpuCard.addView(label("03  CPU PERFORMANCE PROFILES", 16f, violet, true))
+        cpuCard.addView(label("CPU PERFORMANCE PROFILES", 16f, violet, true))
         space(cpuCard, 8)
         cpuPreset = selector(arrayOf(
             "Không thay đổi xung nhịp",
@@ -423,7 +498,7 @@ class MainActivity : Activity() {
 
         val colorCard = panel()
         layout.addView(colorCard)
-        colorCard.addView(label("04  IMAGE COLOR LAB (PREVIEW)", 16f, cyan, true))
+        colorCard.addView(label("IMAGE COLOR LAB (PREVIEW)", 16f, cyan, true))
         space(colorCard, 7)
         colorPreview = ImageView(this).apply {
             setImageBitmap(createColorSample())
@@ -458,13 +533,30 @@ class MainActivity : Activity() {
 
         val boot = panel()
         layout.addView(boot)
-        boot.addView(label("05  AUTO BOOT", 16f, cyan, true))
+        boot.addView(label("AUTO BOOT", 16f, cyan, true))
         autoBoot = Switch(this).apply {
             text = "Tự áp dụng sau khi khởi động lại"
             setTextColor(Color.WHITE)
         }
         boot.addView(autoBoot)
         boot.addView(label("Dùng BOOT_COMPLETED + JobScheduler; yêu cầu cấp SU vĩnh viễn. Không mở UI lúc khởi động.", 12f, muted))
+        space(layout, 13)
+
+        val contact = panel()
+        layout.addView(contact)
+        contact.addView(label("DUYKHAIDEX • SAMSUNG DeX", 16f, cyan, true))
+        space(contact, 6)
+        contact.addView(label("Tư vấn và bán máy Samsung DeX", 13f, Color.WHITE, true))
+        contact.addView(label("Zalo: 0862134811", 18f, violet, true))
+        contact.addView(action("LIÊN HỆ ZALO", cyan).apply {
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://zalo.me/0862134811")))
+                } catch (e: Exception) {
+                    status.text = "Không mở được Zalo: " + e.message
+                }
+            }
+        })
         space(layout, 13)
 
         status = label(getSharedPreferences("boot_result", MODE_PRIVATE).getString("last", "READY • Chưa có kết quả AUTO BOOT") ?: "READY", 12f, muted)
@@ -569,10 +661,20 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        monitorHandler.removeCallbacks(monitorTick)
+        if (::liveFps.isInitialized) monitorHandler.post(monitorTick)
+        if (::hudButton.isInitialized) {
+            hudButton.text = if (MonitorOverlayService.active) "TẮT HUD NỔI" else "BẬT HUD NỔI KHI CHƠI GAME"
+        }
         if (::rootLed.isInitialized) {
             updatePrivilegeIndicators()
             probeRoot()
         }
+    }
+
+    override fun onPause() {
+        monitorHandler.removeCallbacks(monitorTick)
+        super.onPause()
     }
 
     private fun updatePrivilegeIndicators() {
@@ -589,6 +691,7 @@ class MainActivity : Activity() {
         rootLed.setTextColor(muted)
         executor.execute {
             val granted = RootAccess.status()
+            monitorRoot = granted
             runOnUiThread {
                 if (::rootLed.isInitialized) {
                     rootLed.text = if (granted) "● ROOT: ĐÃ KẾT NỐI" else "● ROOT: CHƯA CẤP QUYỀN"
@@ -688,6 +791,8 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
     override fun onDestroy() {
+        monitorHandler.removeCallbacks(monitorTick)
+        monitorExecutor.shutdownNow()
         try {
             CommandRunner.disconnect()
             Shizuku.removeBinderReceivedListener(shizukuBinderListener)
