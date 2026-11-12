@@ -1,7 +1,8 @@
 package com.duykhai.gaming
 
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import android.content.Context
+import android.os.PowerManager
 
 data class MonitorSnapshot(
     val fps: Float?,
@@ -17,7 +18,7 @@ data class MonitorSnapshot(
  */
 object PerformanceMonitor {
     private val packageRegex = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
-    private val cpuTypeRegex = Regex("cpu|ap|soc|cluster|tsens|silver|gold|little|big", RegexOption.IGNORE_CASE)
+    private val cpuTypeRegex = Regex("cpu|ap|soc|cluster|tsens|silver|gold|little|big|cpuss|cpu[0-9]", RegexOption.IGNORE_CASE)
     private val ignoreTypeRegex = Regex("battery|batt|charger|skin|usb|modem|gpu", RegexOption.IGNORE_CASE)
 
     private fun sensorScript(): String {
@@ -85,37 +86,94 @@ object PerformanceMonitor {
         else ShellProcess.execute(listOf("sh", "-c", shell))
     }
 
-    private fun singleQuoted(raw: String): String = "'" + raw.replace("'", "'\"'\"'") + "'"
+    private val packagePattern = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+")
+    @Volatile private var captureEnabled = false
+    @Volatile private var capturePermission = false
 
-    private fun gameFps(pkg: String, root: Boolean): Float? {
-        if (!packageRegex.matches(pkg) || (!root && !CommandRunner.ready())) return null
-        val search = command("dumpsys SurfaceFlinger --list | grep -F " + singleQuoted(pkg) + " | head -n 8", root)
-        if (search.getOrNull(0) != "0") return null
-        val layers = search.getOrNull(1)?.lineSequence()?.map { it.trim() }
-            ?.filter { it.contains(pkg, true) && it.isNotEmpty() }?.toList().orEmpty()
-        val layer = layers.firstOrNull { it.contains("SurfaceView", true) }
-            ?: layers.firstOrNull { it.contains("BLAST", true) }
-            ?: layers.firstOrNull() ?: return null
-        val latency = command("dumpsys SurfaceFlinger --latency " + singleQuoted(layer), root)
-        if (latency.getOrNull(0) != "0") return null
-        return calculateFps(latency.getOrNull(1).orEmpty(), System.nanoTime())
+    internal fun averageFpsForPackage(output: String, pkg: String): Float? {
+        if (!packagePattern.matches(pkg)) return null
+        var layer = ""
+        var selected: Float? = null
+        var score = -1
+        for (line in output.lineSequence()) {
+            val text = line.trim()
+            if (text.startsWith("layerName =", true)) layer = text.substringAfter('=').trim()
+            if (text.startsWith("averageFPS =", true) && layer.contains(pkg, true)) {
+                val fps = text.substringAfter('=').trim().toFloatOrNull()
+                val quality = when {
+                    layer.contains("SurfaceView", true) -> 3
+                    layer.contains("BLAST", true) -> 2
+                    else -> 1
+                }
+                if (fps != null && fps in 1f..300f && quality >= score) {
+                    selected = fps
+                    score = quality
+                }
+            }
+        }
+        return selected
+    }
+
+    private fun readFps(pkg: String, root: Boolean): Pair<Float?, String> {
+        if (!packagePattern.matches(pkg))
+            return null to "Chọn package game trước khi đo FPS."
+        if (!root && !CommandRunner.ready())
+            return null to "FPS game cần Root được cấp quyền hoặc Shizuku đã kết nối."
+        // Android's documented frame-rate measurement uses SurfaceFlinger timestats.
+        // No superuser prompt is made here; only previously-authorized sessions.
+        if (!captureEnabled || capturePermission != root) {
+            val start = command("dumpsys SurfaceFlinger --timestats -clear -enable", root)
+            if (start.getOrNull(0) != "0")
+                return null to "SurfaceFlinger từ chối bật timestats."
+            captureEnabled = true
+            capturePermission = root
+            return null to "Đang tích lũy mẫu FPS; mở game rồi xem lại."
+        }
+        val results = command(
+            "dumpsys SurfaceFlinger --timestats -dump | grep -E 'layerName = |averageFPS = '",
+            root
+        )
+        if (results.getOrNull(0) != "0")
+            return null to "Không đọc được timestats từ SurfaceFlinger."
+        val fps = averageFpsForPackage(results.getOrNull(1).orEmpty(), pkg)
+        if (fps == null) return null to "Chưa có layer đang render cho game; mở game và chọn đúng package."
+        return fps to "FPS trung bình từ layer game (SurfaceFlinger)."
+    }
+
+    internal fun parseThermalService(output: String): Float? {
+        // Android's thermalservice dump includes Temperature{mValue=..., mType=0, mName=...}
+        // mType=0 is CPU, in Celsius; battery / skin sensors must not be mislabeled.
+        val values = Regex("""(?i)(?:mValue|value)\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)[^\\n]{0,150}?(?:mType|type)\\s*=\\s*(?:0|CPU)\\b""")
+            .findAll(output).mapNotNull { it.groupValues[1].toFloatOrNull() }
+            .filter { it in 0f..110f }.toList()
+        return values.maxOrNull()
     }
 
     fun sample(gamePackage: String, hasRoot: Boolean): MonitorSnapshot {
-        val initial = command(sensorScript(), false)
-        var readings = readSensorData(initial.getOrNull(1).orEmpty())
-        if (hasRoot && (readings.first.isEmpty() || readings.second == null)) {
-            val privileged = command(sensorScript(), true)
-            val elevated = readSensorData(privileged.getOrNull(1).orEmpty())
-            readings = (if (elevated.first.isNotEmpty()) elevated.first else readings.first) to
-                (elevated.second ?: readings.second)
+        val first = command(sensorScript(), false)
+        var readings = readSensorData(first.getOrNull(1).orEmpty())
+        if (readings.first.isEmpty() || readings.second == null) {
+            // With a previously granted session, try privileged sysfs once.
+            if (hasRoot || CommandRunner.ready()) {
+                val extra = command(sensorScript(), hasRoot)
+                val elevated = readSensorData(extra.getOrNull(1).orEmpty())
+                readings = (if (elevated.first.isNotEmpty()) elevated.first else readings.first) to
+                    (elevated.second ?: readings.second)
+            }
         }
-        val fps = try { gameFps(gamePackage.trim(), hasRoot) } catch (_: Exception) { null }
+        if (readings.second == null) {
+            val thermal = command("dumpsys thermalservice", hasRoot)
+            val fallback = parseThermalService(thermal.getOrNull(1).orEmpty())
+            readings = readings.first to fallback
+        }
+        val frame = try { readFps(gamePackage.trim(), hasRoot) }
+            catch (_: Exception) { null to "SurfaceFlinger không hỗ trợ thiết bị này." }
+        val sensorText = if (readings.second == null) "Không đọc được cảm biến CPU." else ""
         return MonitorSnapshot(
-            fps = fps,
+            fps = frame.first,
             temperatureC = readings.second,
             cpuClocks = readings.first,
-            diagnostic = if (fps == null) "FPS chưa có dữ liệu layer game" else "FPS ước tính từ SurfaceFlinger"
+            diagnostic = frame.second + if (sensorText.isNotEmpty()) " " + sensorText else ""
         )
     }
 
