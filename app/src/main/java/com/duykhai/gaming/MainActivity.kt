@@ -39,6 +39,7 @@ import android.widget.TextView
 import android.widget.ArrayAdapter
 import android.widget.AdapterView
 import android.widget.ImageView
+import android.text.InputType
 import rikka.shizuku.Shizuku
 import rikka.sui.Sui
 import java.util.concurrent.Executors
@@ -187,10 +188,8 @@ object DisplayRoot {
         val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands, root)
         val modeReadback = if (p.hz != 0 && p.hardHz && displayResult.ok) {
             val value = CommandRunner.run("cmd display get-user-preferred-display-mode 0", root)
-            if (value.getOrNull(0) == "0") "
-Hz preferred: " + value.getOrNull(1).orEmpty()
-                else "
-Không đọc lại được preferred Hz; kernel có thể bỏ qua"
+            if (value.getOrNull(0) == "0") "\nHz preferred: " + value.getOrNull(1).orEmpty()
+                else "\nKhông đọc lại được preferred Hz; kernel có thể bỏ qua"
         } else ""
         val cpuResult = if (p.cpuMode == 0) Result(true, "CPU giữ nguyên")
                         else runCommands(listOf(CpuProfiles.command(p.cpuMode)), true)
@@ -312,6 +311,7 @@ class MainActivity : Activity() {
                             liveFps.text = "FPS GAME: " + PerformanceMonitor.fpsLabel(snapshot.fps)
                             liveTemp.text = "NHIỆT ĐỘ CPU: " + PerformanceMonitor.temperatureLabel(snapshot.temperatureC)
                             liveClocks.text = "XUNG CPU: " + PerformanceMonitor.clocksLabel(snapshot.cpuClocks)
+                            liveDiagnostic.text = snapshot.diagnostic
                         }
                         monitorBusy.set(false)
                     }
@@ -326,6 +326,14 @@ class MainActivity : Activity() {
     private lateinit var dpiEnabled: Switch
     private lateinit var dpiSeek: SeekBar
     private lateinit var dpiText: TextView
+    private lateinit var dpiCustom: EditText
+    private lateinit var customSizeSwitch: Switch
+    private lateinit var widthCustom: EditText
+    private lateinit var heightCustom: EditText
+    private lateinit var hardHzSwitch: Switch
+    private lateinit var hudScaleSeek: SeekBar
+    private lateinit var hudScaleLabel: TextView
+    private lateinit var liveDiagnostic: TextView
     private lateinit var hz: Spinner
     private lateinit var fps: Spinner
     private lateinit var gamePackage: EditText
@@ -359,7 +367,7 @@ class MainActivity : Activity() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(18), dp(18), dp(26))
-            setBackgroundColor(bgColor)
+            background = SpaceBackdropDrawable()
         }
         val scroll = ScrollView(this)
         scroll.addView(layout)
@@ -378,7 +386,7 @@ class MainActivity : Activity() {
         }
         brandRow.addView(brandLabel)
         layout.addView(brandRow)
-        layout.addView(label("SAMSUNG GAMING MONITOR  •  v0.3", 11f, muted))
+        layout.addView(label("SPACE CREW • PERFORMANCE LAB • v0.4", 11f, muted))
         space(layout, 18)
         layout.addView(stat("DEVICE ONLINE", Build.MANUFACTURER.uppercase() + "  " + Build.MODEL))
         space(layout, 10)
@@ -403,11 +411,32 @@ class MainActivity : Activity() {
         monitorCard.addView(liveTemp)
         space(monitorCard, 5)
         monitorCard.addView(liveClocks)
+        liveDiagnostic = label("Khởi tạo đo hiệu năng…", 11f, muted)
+        space(monitorCard, 4)
+        monitorCard.addView(liveDiagnostic)
         space(monitorCard, 8)
         monitorCard.addView(label("FPS là ước tính khung hình game được trình chiếu, KHÔNG phải Hz màn hình. Muốn xem khi đang chơi, bật HUD nổi.", 11f, muted))
         space(monitorCard, 9)
         hudButton = action("BẬT HUD NỔI KHI CHƠI GAME", cyan)
         monitorCard.addView(hudButton)
+        space(monitorCard, 7)
+        hudScaleLabel = label("Kích thước HUD: 100%", 12f, muted)
+        monitorCard.addView(hudScaleLabel)
+        hudScaleSeek = SeekBar(this).apply {
+            max = 100
+            progress = (getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("scale", 100) - 60).coerceIn(0, 100)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seek: SeekBar?, value: Int, byUser: Boolean) {
+                    val percent = value + 60
+                    hudScaleLabel.text = "Kích thước HUD: " + percent + "%"
+                    if (byUser) getSharedPreferences("hud_prefs", MODE_PRIVATE).edit().putInt("scale", percent).apply()
+                }
+                override fun onStartTrackingTouch(seek: SeekBar?) {}
+                override fun onStopTrackingTouch(seek: SeekBar?) {}
+            })
+        }
+        monitorCard.addView(hudScaleSeek)
+        hudScaleLabel.text = "Kích thước HUD: " + (hudScaleSeek.progress + 60) + "%"
         hudButton.setOnClickListener {
             if (!Settings.canDrawOverlays(this)) {
                 status.text = "Cấp quyền hiển thị trên ứng dụng khác, sau đó bấm BẬT HUD lần nữa."
@@ -482,24 +511,69 @@ class MainActivity : Activity() {
             max = 48
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seek: SeekBar?, progress: Int, fromUser: Boolean) {
-                    dpiText.text = (160 + progress * 10).toString() + " DPI"
+                    val chosen = 160 + progress * 10
+                    dpiText.text = chosen.toString() + " DPI"
+                    if (fromUser && ::dpiCustom.isInitialized) dpiCustom.setText(chosen.toString())
                 }
                 override fun onStartTrackingTouch(seek: SeekBar?) {}
                 override fun onStopTrackingTouch(seek: SeekBar?) {}
             })
         }
         screen.addView(dpiSeek)
+        screen.addView(label("DPI tùy chỉnh (120–800)", 12f, muted))
+        dpiCustom = EditText(this).apply {
+            setSingleLine(true)
+            hint = "420"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setTextColor(Color.WHITE)
+        }
+        screen.addView(dpiCustom)
+        space(screen, 10)
+        customSizeSwitch = Switch(this).apply {
+            text = "Tùy biến chiều rộng × chiều cao"
+            setTextColor(Color.WHITE)
+        }
+        screen.addView(customSizeSwitch)
+        screen.addView(label("Độ phân giải theo chiều rộng / chiều cao (px)", 12f, muted))
+        val dimensionsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        widthCustom = EditText(this).apply {
+            hint = "1080"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+        }
+        heightCustom = EditText(this).apply {
+            hint = "2400"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+        }
+        dimensionsRow.addView(widthCustom, LinearLayout.LayoutParams(0, dp(52), 1f))
+        dimensionsRow.addView(label(" × ", 16f, cyan, true))
+        dimensionsRow.addView(heightCustom, LinearLayout.LayoutParams(0, dp(52), 1f))
+        screen.addView(dimensionsRow)
+        screen.addView(label("Khi bật tùy chỉnh, hai thông số trên thay thế preset/tỷ lệ. Nếu sai có thể reset bằng ADB.", 11f, muted))
+        space(layout, 13)
+
+        val hzCard = panel()
+        layout.addView(hzCard)
+        hzCard.addView(label("KHÓA TẦN SỐ QUÉT (HZ)", 16f, cyan, true))
+        hzCard.addView(label("Chỉ có hiệu lực ở các mode vật lý màn hình hỗ trợ", 11f, muted))
+        hz = selector(arrayOf("Không đổi", "60 Hz", "90 Hz", "120 Hz", "144 Hz", "165 Hz", "200 Hz"))
+        hzCard.addView(hz)
+        hardHzSwitch = Switch(this).apply {
+            text = "Ưu tiên mode vật lý + xác minh DisplayManager"
+            setTextColor(Color.WHITE)
+        }
+        hzCard.addView(hardHzSwitch)
+        hzCard.addView(label("Dùng min/peak Hz và user-preferred-display-mode. Không thể vượt giới hạn màn hình hoặc bỏ qua quyết định của One UI.", 11f, muted))
         space(layout, 13)
 
         val performance = panel()
         layout.addView(performance)
         performance.addView(label("GAMING PERFORMANCE", 16f, violet, true))
         space(performance, 10)
-        performance.addView(label("Hz yêu cầu (giới hạn bởi màn hình/ROM)", 13f, muted))
-        hz = selector(arrayOf("Không đổi", "60 Hz", "90 Hz", "120 Hz", "144 Hz", "165 Hz", "200 Hz"))
-        performance.addView(hz)
-        space(performance, 10)
-        performance.addView(label("FPS GameManager (chỉ game/ROM hỗ trợ)", 13f, muted))
+        performance.addView(label("FPS GAME • độc lập với tần số quét", 13f, muted))
         fps = selector(arrayOf("Không đổi", "30 FPS", "45 FPS", "60 FPS", "90 FPS", "120 FPS", "144 FPS*", "165 FPS*"))
         performance.addView(fps)
         space(performance, 10)
@@ -537,7 +611,7 @@ class MainActivity : Activity() {
             "SUPER • Tối đa xung gốc • 100%"
         ))
         cpuCard.addView(cpuPreset)
-        cpuCard.addView(label("Chỉ giới hạn trần CPU trong dải nhà sản xuất. KHÔNG ép vượt xung gốc, không bỏ bảo vệ nhiệt. Một số kernel sẽ khóa thao tác.", 11f, muted))
+        cpuCard.addView(label("Điều chỉnh giới hạn xung MIN/MAX trong dải gốc và đọc lại từ kernel. Không tắt điều tiết nhiệt. Một số Samsung chặn thao tác.", 11f, muted))
         space(layout, 13)
 
         val colorCard = panel()
@@ -669,9 +743,13 @@ class MainActivity : Activity() {
 
     private fun readFields(): Profile = Profile(
         resolution = intArrayOf(0, 720, 1080, 1440)[resolution.selectedItemPosition],
+        customSize = customSizeSwitch.isChecked,
+        customWidth = widthCustom.text.toString().toIntOrNull() ?: 0,
+        customHeight = heightCustom.text.toString().toIntOrNull() ?: 0,
+        hardHz = hardHzSwitch.isChecked,
         ratio = ratio.selectedItemPosition,
         dpiEnabled = dpiEnabled.isChecked,
-        dpi = 160 + dpiSeek.progress * 10,
+        dpi = dpiCustom.text.toString().toIntOrNull() ?: (160 + dpiSeek.progress * 10),
         hz = intArrayOf(0, 60, 90, 120, 144, 165, 200)[hz.selectedItemPosition],
         fps = FpsOptions.values[fps.selectedItemPosition],
         gamePackage = gamePackage.text.toString().trim(),
@@ -686,9 +764,14 @@ class MainActivity : Activity() {
     private fun restoreFields(p: Profile) {
         restoring = true
         resolution.setSelection(intArrayOf(0, 720, 1080, 1440).indexOf(p.resolution).coerceAtLeast(0))
+        customSizeSwitch.isChecked = p.customSize
+        widthCustom.setText(if (p.customWidth == 0) "" else p.customWidth.toString())
+        heightCustom.setText(if (p.customHeight == 0) "" else p.customHeight.toString())
+        hardHzSwitch.isChecked = p.hardHz
         ratio.setSelection(p.ratio.coerceIn(0, 3))
         dpiEnabled.isChecked = p.dpiEnabled
         dpiSeek.progress = (p.dpi.coerceIn(160, 640) - 160) / 10
+        dpiCustom.setText(p.dpi.toString())
         hz.setSelection(intArrayOf(0, 60, 90, 120, 144, 165, 200).indexOf(p.hz).coerceAtLeast(0))
         fps.setSelection(FpsOptions.values.indexOf(p.fps).coerceAtLeast(0))
         gamePreset.setSelection(GameCatalog.position(p.gamePackage))
@@ -712,7 +795,7 @@ class MainActivity : Activity() {
         }
         if (::rootLed.isInitialized) {
             updatePrivilegeIndicators()
-            probeRoot()
+            updateRootIndicator()
         }
     }
 
@@ -729,19 +812,20 @@ class MainActivity : Activity() {
         shizukuLed.setTextColor(if (state.startsWith("ĐÃ CẤP")) Color.rgb(68, 235, 160) else muted)
     }
 
+    private fun updateRootIndicator() {
+        if (!::rootLed.isInitialized) return
+        val granted = RootAccess.status()
+        monitorRoot = granted
+        rootLed.text = if (granted) "● ROOT: ĐÃ CẤP (PHIÊN NÀY)" else "● ROOT: CHƯA CẤP • BẤM NÚT ĐỂ CHO PHÉP"
+        rootLed.setTextColor(if (granted) Color.rgb(68, 235, 160) else muted)
+    }
+
     private fun probeRoot() {
         if (!::rootLed.isInitialized) return
-        rootLed.text = "● ROOT: ĐANG YÊU CẦU QUYỀN..."
-        rootLed.setTextColor(muted)
+        rootLed.text = "● ROOT: ĐANG ĐỢI QUYỀN..."
         executor.execute {
-            val granted = RootAccess.status()
-            monitorRoot = granted
-            runOnUiThread {
-                if (::rootLed.isInitialized) {
-                    rootLed.text = if (granted) "● ROOT: ĐÃ KẾT NỐI" else "● ROOT: CHƯA CẤP QUYỀN"
-                    rootLed.setTextColor(if (granted) Color.rgb(68, 235, 160) else Color.rgb(255, 145, 145))
-                }
-            }
+            RootAccess.request()
+            runOnUiThread { updateRootIndicator() }
         }
     }
 
