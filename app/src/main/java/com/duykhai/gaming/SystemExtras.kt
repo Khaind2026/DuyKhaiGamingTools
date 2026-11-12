@@ -7,12 +7,18 @@ import rikka.shizuku.Shizuku
 
 /** Root is required for CPU; display commands can also use the Shizuku service. */
 object RootAccess {
-    fun status(): Boolean {
-        return try {
-            val result = ShellProcess.execute(listOf("su", "-c", "id -u"))
-            result[0] == "0" && result[1].trim() == "0"
+    // Explicit, cached user authorization. No automatic su prompts on each poll/resume.
+    @Volatile private var granted = false
+    fun status(): Boolean = granted
+    fun request(): Boolean {
+        val ok = try {
+            val r = ShellProcess.execute(listOf("su", "-c", "id -u"))
+            r.getOrNull(0) == "0" && r.getOrNull(1)?.trim() == "0"
         } catch (_: Exception) { false }
+        granted = ok
+        return ok
     }
+    fun invalidate() { granted = false }
 }
 
 object ShizukuAccess {
