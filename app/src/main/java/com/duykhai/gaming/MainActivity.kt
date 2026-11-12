@@ -184,16 +184,11 @@ object DisplayRoot {
             commands.add("cmd game set --mode 2 --fps " + p.fps + " " + p.gamePackage)
             commands.add("cmd game mode 2 " + p.gamePackage)
         }
-        if (commands.isEmpty() && p.cpuMode == 0) return Result(false, "Chưa chọn thiết lập nào")
-        val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands, root)
-        val modeReadback = if (p.hz != 0 && p.hardHz && displayResult.ok) {
-            val value = CommandRunner.run("cmd display get-user-preferred-display-mode 0", root)
-            if (value.getOrNull(0) == "0") "\nHz preferred: " + value.getOrNull(1).orEmpty()
-                else "\nKhông đọc lại được preferred Hz; kernel có thể bỏ qua"
-        } else ""
-        val cpuResult = if (p.cpuMode == 0) Result(true, "CPU giữ nguyên")
-                        else runCommands(listOf(CpuProfiles.command(p.cpuMode)), true)
-        return Result(displayResult.ok && cpuResult.ok, displayResult.info + modeReadback + " • CPU: " + cpuResult.info)
+        if (p.hardHz && p.hz != 0)
+            commands.add("cmd display get-user-preferred-display-mode 0")
+        if (p.cpuMode != 0) commands.add(CpuProfiles.command(p.cpuMode))
+        if (commands.isEmpty()) return Result(false, "Chưa chọn thiết lập nào")
+        return runCommands(commands, root)
     }
 
     fun reset(p: Profile): Result {
@@ -206,23 +201,33 @@ object DisplayRoot {
             "settings delete system min_refresh_rate"
         )
         if (gamePattern.matches(p.gamePackage)) commands.add("cmd game reset " + p.gamePackage)
+        if (p.hardHz) commands.add("cmd display clear-user-preferred-display-mode 0 || true")
         if (p.cpuMode != 0) commands.add(CpuProfiles.command(3))
-        val result = runCommands(commands, root)
-        // Best effort: unsupported Samsung firmware may ignore this command.
-        if (p.hardHz && (root || CommandRunner.ready())) {
-            CommandRunner.run("cmd display clear-user-preferred-display-mode 0", root)
-        }
-        return result
+        return runCommands(commands, root)
     }
 
     private fun runCommands(commands: List<String>, root: Boolean): Result {
+        if (Thread.currentThread().isInterrupted) return Result(false, "Đã hủy")
+        if (root) {
+            // One root shell per APPLY/RESET instead of one permission request per command.
+            val script = "set -e\n" + commands.joinToString("\n") + "\necho DK_APPLIED"
+            val result = CommandRunner.run(script, true)
+            val output = result.getOrElse(1) { "Không có phản hồi" }
+            val ok = result.getOrNull(0) == "0" && output.contains("DK_APPLIED") &&
+                !Regex("(?i)(error:|exception|not supported|invalid|unknown command)").containsMatchIn(output)
+            if (result.getOrNull(0) != "0" && output.contains("permission denied", true))
+                RootAccess.invalidate()
+            return Result(ok, (if (ok) "✓ Root (một phiên): " else "✗ Root: ") +
+                output.replace("DK_APPLIED", "Đã gửi lệnh").take(1200))
+        }
         val details = commands.map { command ->
             if (Thread.currentThread().isInterrupted) return Result(false, "Đã hủy")
-            val result = CommandRunner.run(command, root)
-            val text = result.getOrElse(1) { "Không có phản hồi" }
-            val ok = result[0] == "0" && !Regex("(?i)(error:|exception|not supported|invalid|unknown command)").containsMatchIn(text)
+            val result = CommandRunner.run(command, false)
+            val output = result.getOrElse(1) { "Không có phản hồi" }
+            val ok = result.getOrNull(0) == "0" &&
+                !Regex("(?i)(error:|exception|not supported|invalid|unknown command)").containsMatchIn(output)
             ok to ((if (ok) "✓ " else "✗ ") + command.lineSequence().first().take(65) +
-                (if (text.isBlank()) "" else ": " + text.take(400)))
+                if (output.isBlank()) "" else ": " + output.take(240))
         }
         return Result(details.all { it.first }, details.joinToString("\n") { it.second })
     }
