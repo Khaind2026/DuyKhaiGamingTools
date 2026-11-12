@@ -177,6 +177,71 @@ object PerformanceMonitor {
         )
     }
 
+
+    data class ExternalReadout(
+        val displayName: String,
+        val displayId: Int,
+        val resolution: String,
+        val refreshHz: Float?,
+        val presentedLayerFps: Float?,
+        val diagnostic: String
+    )
+
+    internal fun parseExternalLayerFps(stats: String, displayName: String): Float? {
+        // Android exposes layer timestats, not a guaranteed HDMI-wide compositor FPS.
+        // Use only clearly external/HDMI/DeX-tagged layers, never substitute display Hz.
+        val keys = listOf("external", "hdmi", "dex", displayName.lowercase())
+        var name = ""
+        var matched: Float? = null
+        var bestScore = -1
+        for (line in stats.lineSequence()) {
+            val l = line.trim()
+            if (l.startsWith("layerName =", ignoreCase = true)) name = l.substringAfter('=').trim()
+            if (l.startsWith("averageFPS =", ignoreCase = true)) {
+                val fps = l.substringAfter('=').trim().toFloatOrNull()
+                val score = when {
+                    name.contains(displayName, ignoreCase = true) && displayName.isNotBlank() -> 3
+                    name.contains("hdmi", ignoreCase = true) ||
+                        name.contains("external", ignoreCase = true) -> 2
+                    name.contains("dex", ignoreCase = true) -> 1
+                    else -> -1
+                }
+                if (fps != null && fps in 1f..300f && score > bestScore) {
+                    matched = fps
+                    bestScore = score
+                }
+            }
+        }
+        return matched
+    }
+
+    fun external(context: Context, hasRoot: Boolean): ExternalReadout {
+        val display = try { FoldDisplayTools.activeExternalDisplay(context) }
+            catch (_: Exception) { null }
+            ?: return ExternalReadout("Chưa kết nối HDMI/DeX", -1, "—", null, null,
+                "Không phát hiện màn hình ngoài")
+        val mode = display.mode
+        val size = mode.physicalWidth.toString() + " × " + mode.physicalHeight
+        if (!hasRoot && !CommandRunner.ready())
+            return ExternalReadout(display.name, display.displayId, size, display.refreshRate, null,
+                "Muốn đo khung hình layer cần Root đã cấp hoặc Shizuku")
+        // Enable once; timestamps are later sampled independently of whether a game is opened.
+        if (!captureEnabled || capturePermission != hasRoot) {
+            val enabled = command("dumpsys SurfaceFlinger --timestats -clear -enable", hasRoot)
+            if (enabled.getOrNull(0) != "0")
+                return ExternalReadout(display.name, display.displayId, size, display.refreshRate, null,
+                    "Không bật được SurfaceFlinger timestats")
+            captureEnabled = true
+            capturePermission = hasRoot
+        }
+        val result = command("dumpsys SurfaceFlinger --timestats -dump", hasRoot)
+        val fps = if (result.getOrNull(0) == "0")
+            parseExternalLayerFps(result.getOrElse(1) { "" }, display.name) else null
+        return ExternalReadout(display.name, display.displayId, size, display.refreshRate, fps,
+            if (fps == null) "HDMI đã kết nối; ROM không xuất FPS layer màn ngoài" else
+                "FPS trung bình layer gắn nhãn HDMI/DeX, không phải FPS toàn màn")
+    }
+
     fun fpsLabel(value: Float?): String =
         value?.let { String.format(Locale.US, "%.1f FPS", it) } ?: "—"
 
