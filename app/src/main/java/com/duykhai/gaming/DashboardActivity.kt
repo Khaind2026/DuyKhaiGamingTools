@@ -97,7 +97,7 @@ class DashboardActivity : Activity() {
                             } ?: "—"
                         } else if (page == "cpu") {
                             cpuTemperatureValue?.text = sample.temperatureC?.let {
-                                String.format(Locale.US, "CPU hotspot: %.1f°C • %s", it,
+                                String.format(Locale.US, "CẢM BIẾN: %.1f°C • %s", it,
                                     sample.sensorName ?: "không xác định")
                             } ?: "Không có cảm biến CPU được xác định"
                             cpuClocksValue?.text = PerformanceMonitor.clocksLabel(sample.cpuClocks) +

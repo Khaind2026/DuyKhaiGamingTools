@@ -319,7 +319,7 @@ class MainActivity : Activity() {
             if (monitorBusy.compareAndSet(false, true)) {
                 val game = gamePackage.text.toString().trim()
                 monitorExecutor.execute {
-                    val snapshot = try { PerformanceMonitor.sample(game, monitorRoot) }
+                    val snapshot = try { PerformanceMonitor.sample(game, monitorRoot, this@MainActivity) }
                         catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không thể đọc") }
                     runOnUiThread {
                         if (!isFinishing) {
@@ -839,7 +839,7 @@ class MainActivity : Activity() {
         if (!::rootLed.isInitialized) return
         rootLed.text = "● ROOT: ĐANG ĐỢI QUYỀN..."
         executor.execute {
-            RootAccess.request()
+            RootAccess.request(this@MainActivity)
             runOnUiThread { updateRootIndicator() }
         }
     }

@@ -140,9 +140,9 @@ object RealtimeSensors {
     @Volatile private var lastPrivilegedAt = 0L
     private fun privileged(): HardwareFrame? {
         val now = System.currentTimeMillis()
-        if (now - lastPrivilegedAt < 2500L) return lastPrivileged
         val root = RootAccess.status()
-        if (!root && !CommandRunner.ready()) return lastPrivileged
+        if (!root && !CommandRunner.ready()) return null
+        if (now - lastPrivilegedAt < 2500L) return lastPrivileged
         val response = CommandRunner.run(shellRead, root)
         lastPrivilegedAt = now
         if (response.getOrNull(0) == "0") {
@@ -177,7 +177,8 @@ object RealtimeSensors {
 
     fun detail(frame: HardwareFrame): String {
         val cpu = frame.selectedCpu?.let {
-            String.format(Locale.US, "CPU hotspot %.1f°C • %s (%s)", it.celsius, it.id, it.source)
+            val label = if (cpuPriority(it.id) > 0) "CPU hotspot" else "Cảm biến người dùng chọn"
+            String.format(Locale.US, "%s %.1f°C • %s (%s)", label, it.celsius, it.id, it.source)
         } ?: "Không nhận diện được cảm biến CPU"
         val source = frame.frequencies.firstOrNull()?.source ?: "chưa đọc được xung"
         return cpu + " | Xung: " + source +
