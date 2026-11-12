@@ -5,18 +5,12 @@ import android.content.pm.PackageManager
 import java.util.concurrent.TimeUnit
 import rikka.shizuku.Shizuku
 
-/** Root is the only execution backend for display/CPU changes in v0.2. */
+/** Root is required for CPU; display commands can also use the Shizuku service. */
 object RootAccess {
     fun status(): Boolean {
         return try {
-            val process = ProcessBuilder("su", "-c", "id -u").redirectErrorStream(true).start()
-            if (!process.waitFor(6, TimeUnit.SECONDS)) {
-                process.destroyForcibly()
-                false
-            } else {
-                val result = process.inputStream.bufferedReader().use { it.readText().trim() }
-                process.exitValue() == 0 && result.lines().lastOrNull()?.trim() == "0"
-            }
+            val result = ShellProcess.execute(listOf("su", "-c", "id -u"))
+            result[0] == "0" && result[1].trim() == "0"
         } catch (_: Exception) { false }
     }
 }
@@ -93,7 +87,11 @@ object CpuProfiles {
                 done
                 [ "${dollar}best" -eq 0 ] || target=${dollar}best
               fi
-              if echo "${dollar}target" > "${dollar}p/scaling_max_freq" 2>/dev/null; then changed=${dollar}((changed+1)); else failed=${dollar}((failed+1)); fi
+              if echo "${dollar}target" > "${dollar}p/scaling_max_freq" 2>/dev/null; then
+                actual=${dollar}(cat "${dollar}p/scaling_max_freq")
+                echo "${dollar}p: requested=${dollar}target actual=${dollar}actual kHz"
+                if [ "${dollar}actual" = "${dollar}target" ]; then changed=${dollar}((changed+1)); else failed=${dollar}((failed+1)); fi
+              else failed=${dollar}((failed+1)); fi
             done
             echo "CPU policies applied=${dollar}changed failures=${dollar}failed (stock limits, thermal preserved)"
             [ "${dollar}changed" -gt 0 ] && [ "${dollar}failed" -eq 0 ]

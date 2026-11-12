@@ -101,12 +101,16 @@ object Profiles {
 
 object DisplayRoot {
     private val hzAllowed = setOf(60, 90, 120, 144, 165, 200)
-    private val fpsAllowed = setOf(30, 45, 60, 90, 120, 144, 165)
+    private val fpsAllowed = FpsOptions.values.drop(1).toSet()
     private val gamePattern = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
 
     data class Result(val ok: Boolean, val info: String)
 
-    fun apply(ctx: Context, p: Profile): Result {
+    fun apply(ctx: Context, p: Profile, boot: Boolean = false): Result {
+        if (p.cpuMode !in 0..3) return Result(false, "CPU profile không hợp lệ")
+        val root = RootAccess.status()
+        if (!root && (boot || !CommandRunner.ready())) return Result(false, "Cần Root hoặc Shizuku shell đã kết nối")
+        if (!root && p.cpuMode != 0) return Result(false, "CPU cần Root; chọn CPU Không thay đổi để dùng Shizuku")
         val commands = mutableListOf<String>()
         if (p.resolution != 0 || p.ratio != 0) {
             if (p.resolution !in setOf(0, 720, 1080, 1440) || p.ratio !in 0..3)
@@ -139,16 +143,20 @@ object DisplayRoot {
         if (p.fps != 0) {
             if (p.fps !in fpsAllowed || !gamePattern.matches(p.gamePackage))
                 return Result(false, "Chọn FPS và nhập đúng package game (com.example.game)")
-            commands.add("cmd game set --fps " + p.fps + " " + p.gamePackage)
+            if (Build.VERSION.SDK_INT < 33) return Result(false, "FPS GameManager cần Android 13 trở lên")
+            commands.add("cmd game set --mode 2 --fps " + p.fps + " " + p.gamePackage)
+            commands.add("cmd game mode 2 " + p.gamePackage)
         }
         if (commands.isEmpty() && p.cpuMode == 0) return Result(false, "Chưa chọn thiết lập nào")
-        val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands)
+        val displayResult = if (commands.isEmpty()) Result(true, "Không đổi màn hình/FPS") else runCommands(commands, root)
         val cpuResult = if (p.cpuMode == 0) Result(true, "CPU giữ nguyên")
-                        else runCommands(listOf(CpuProfiles.command(p.cpuMode)))
+                        else runCommands(listOf(CpuProfiles.command(p.cpuMode)), true)
         return Result(displayResult.ok && cpuResult.ok, displayResult.info + " • CPU: " + cpuResult.info)
     }
 
     fun reset(p: Profile): Result {
+        val root = RootAccess.status()
+        if (!root && p.cpuMode != 0) return Result(false, "Cần Root để reset CPU")
         val commands = mutableListOf(
             "wm size reset",
             "wm density reset",
@@ -157,29 +165,21 @@ object DisplayRoot {
         )
         if (gamePattern.matches(p.gamePackage)) commands.add("cmd game reset " + p.gamePackage)
         if (p.cpuMode != 0) commands.add(CpuProfiles.command(3))
-        return runCommands(commands)
+        return runCommands(commands, root)
     }
 
-    private fun runCommands(commands: List<String>): Result {
-        val failures = mutableListOf<String>()
-        commands.forEach { command ->
-            try {
-                val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
-                if (!process.waitFor(8, TimeUnit.SECONDS)) {
-                    process.destroyForcibly()
-                    failures.add(command.substringBefore(" ") + ": timeout/SU")
-                } else if (process.exitValue() != 0) {
-                    val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-                    failures.add(command.substringBefore(" ") + ": " + output.take(120))
-                }
-            } catch (error: Exception) {
-                failures.add("SU: " + (error.message ?: "không có quyền"))
-            }
+    private fun runCommands(commands: List<String>, root: Boolean): Result {
+        val details = commands.map { command ->
+            if (Thread.currentThread().isInterrupted) return Result(false, "Đã hủy")
+            val result = CommandRunner.run(command, root)
+            val text = result.getOrElse(1) { "Không có phản hồi" }
+            val ok = result[0] == "0" && !Regex("(?i)(error:|exception|not supported|invalid|unknown command)").containsMatchIn(text)
+            ok to ((if (ok) "✓ " else "✗ ") + command.lineSequence().first().take(65) +
+                (if (text.isBlank()) "" else ": " + text.take(400)))
         }
-        return if (failures.isEmpty())
-            Result(true, "Đã gửi các lệnh. Hãy kiểm tra DPI/Hz/FPS thực tế.")
-        else Result(false, "Có lệnh không thành công: " + failures.joinToString("; ").take(300))
+        return Result(details.all { it.first }, details.joinToString("\n") { it.second })
     }
+
 }
 
 object BootJobs {
@@ -206,23 +206,33 @@ class BootReceiver : BroadcastReceiver() {
 }
 
 class ApplyJobService : JobService() {
+    private var worker: Thread? = null
+    @Volatile private var stopped = false
     override fun onStartJob(params: JobParameters): Boolean {
-        Thread {
+        stopped = false
+        worker = Thread {
             try {
                 val config = Profiles.load(this)
                 if (config.autoBoot) {
-                    val result = DisplayRoot.apply(this, config)
+                    val result = DisplayRoot.apply(this, config, boot = true)
+                    getSharedPreferences("boot_result", MODE_PRIVATE).edit()
+                        .putString("last", java.text.DateFormat.getDateTimeInstance().format(java.util.Date()) + " • " + result.info)
+                        .apply()
                     Log.i("DuyKhaiBoot", "AutoBoot success=" + result.ok + " " + result.info)
                 }
             } catch (ex: Exception) {
                 Log.e("DuyKhaiBoot", "AutoBoot error", ex)
             } finally {
-                jobFinished(params, false)
+                if (!stopped) jobFinished(params, false)
             }
-        }.start()
+        }.also { it.start() }
         return true
     }
-    override fun onStopJob(params: JobParameters): Boolean = true
+    override fun onStopJob(params: JobParameters): Boolean {
+        stopped = true
+        worker?.interrupt()
+        return false
+    }
 }
 
 class MainActivity : Activity() {
@@ -251,6 +261,7 @@ class MainActivity : Activity() {
     private lateinit var rootLed: TextView
     private lateinit var shizukuLed: TextView
     private lateinit var autoBoot: Switch
+    private var restoring = false
 
     private val shizukuPermissionListener =
         Shizuku.OnRequestPermissionResultListener { _, _ ->
@@ -289,7 +300,7 @@ class MainActivity : Activity() {
         }
         brandRow.addView(brandLabel)
         layout.addView(brandRow)
-        layout.addView(label("SAMSUNG ROOT DISPLAY ENGINE  •  v0.1", 11f, muted))
+        layout.addView(label("SAMSUNG ROOT DISPLAY ENGINE  •  v0.2.1", 11f, muted))
         space(layout, 18)
         layout.addView(stat("DEVICE ONLINE", Build.MANUFACTURER.uppercase() + "  " + Build.MODEL))
         space(layout, 10)
@@ -326,7 +337,7 @@ class MainActivity : Activity() {
                 updatePrivilegeIndicators()
             }
         })
-        privilegeCard.addView(label("Root dùng để áp dụng hệ thống/CPU. Shizuku hiển thị trạng thái, chưa là backend điều chỉnh.", 11f, muted))
+        privilegeCard.addView(label("Root: màn hình/FPS/CPU. Shizuku: màn hình/FPS; CPU và AUTO BOOT cần Root.", 11f, muted))
         space(layout, 14)
 
         val screen = panel()
@@ -456,7 +467,7 @@ class MainActivity : Activity() {
         boot.addView(label("Dùng BOOT_COMPLETED + JobScheduler; yêu cầu cấp SU vĩnh viễn. Không mở UI lúc khởi động.", 12f, muted))
         space(layout, 13)
 
-        status = label("READY  •  Chưa áp dụng", 12f, muted)
+        status = label(getSharedPreferences("boot_result", MODE_PRIVATE).getString("last", "READY • Chưa có kết quả AUTO BOOT") ?: "READY", 12f, muted)
         layout.addView(status)
         space(layout, 12)
         val apply = action("⚡ APPLY GAMING PROFILE", cyan)
@@ -474,30 +485,45 @@ class MainActivity : Activity() {
             Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         } catch (_: Throwable) { }
         updatePrivilegeIndicators()
-        probeRoot()
         autoBoot.setOnCheckedChangeListener { _, checked ->
-            Profiles.save(this, readFields())
-            if (!checked) BootJobs.cancel(this)
-            status.text = if (checked) "AUTO BOOT ON  •  Nhớ bấm APPLY" else "AUTO BOOT OFF"
+            if (!restoring && !checked) {
+                Profiles.save(this, Profiles.load(this).copy(autoBoot = false))
+                BootJobs.cancel(this)
+            }
+            if (!restoring) status.text = if (checked) "AUTO BOOT: bấm APPLY thành công để kích hoạt" else "AUTO BOOT OFF"
         }
         apply.setOnClickListener {
             val config = readFields()
-            Profiles.save(this, config)
-            status.text = "Đang áp dụng bằng quyền SU..."
+            apply.isEnabled = false
+            reset.isEnabled = false
+            status.text = "Đang áp dụng • Root / Shizuku..."
             executor.execute {
                 val result = DisplayRoot.apply(this, config)
-                runOnUiThread { status.text = (if (result.ok) "✓ " else "⚠ ") + result.info }
+                val saved = config.copy(autoBoot = config.autoBoot && RootAccess.status())
+                if (result.ok) Profiles.save(this, saved)
+                runOnUiThread {
+                    apply.isEnabled = true
+                    reset.isEnabled = true
+                    if (result.ok) { restoring = true; autoBoot.isChecked = saved.autoBoot; restoring = false }
+                    status.text = (if (result.ok) "✓ " else "⚠ ") + result.info +
+                        if (config.autoBoot && !saved.autoBoot) "\nAUTO BOOT cần Root." else ""
+                }
             }
         }
         reset.setOnClickListener {
             val last = Profiles.load(this)
             Profiles.save(this, last.copy(autoBoot = false))
             BootJobs.cancel(this)
+            autoBoot.isChecked = false
+            apply.isEnabled = false
+            reset.isEnabled = false
             status.text = "Đang reset..."
             executor.execute {
                 val result = DisplayRoot.reset(last)
                 if (result.ok) Profiles.save(this, Profile())
                 runOnUiThread {
+                    apply.isEnabled = true
+                    reset.isEnabled = true
                     if (result.ok) restoreFields(Profile())
                     status.text = (if (result.ok) "✓ " else "⚠ ") + result.info
                 }
@@ -511,7 +537,7 @@ class MainActivity : Activity() {
         dpiEnabled = dpiEnabled.isChecked,
         dpi = 160 + dpiSeek.progress * 10,
         hz = intArrayOf(0, 60, 90, 120, 144, 165, 200)[hz.selectedItemPosition],
-        fps = intArrayOf(0, 30, 45, 60, 90, 120)[fps.selectedItemPosition],
+        fps = FpsOptions.values[fps.selectedItemPosition],
         gamePackage = gamePackage.text.toString().trim(),
         cpuMode = cpuPreset.selectedItemPosition,
         saturation = saturationSeek.progress,
@@ -522,12 +548,13 @@ class MainActivity : Activity() {
     )
 
     private fun restoreFields(p: Profile) {
+        restoring = true
         resolution.setSelection(intArrayOf(0, 720, 1080, 1440).indexOf(p.resolution).coerceAtLeast(0))
         ratio.setSelection(p.ratio.coerceIn(0, 3))
         dpiEnabled.isChecked = p.dpiEnabled
         dpiSeek.progress = (p.dpi.coerceIn(160, 640) - 160) / 10
         hz.setSelection(intArrayOf(0, 60, 90, 120, 144, 165, 200).indexOf(p.hz).coerceAtLeast(0))
-        fps.setSelection(intArrayOf(0, 30, 45, 60, 90, 120, 144, 165).indexOf(p.fps).coerceAtLeast(0))
+        fps.setSelection(FpsOptions.values.indexOf(p.fps).coerceAtLeast(0))
         gamePreset.setSelection(GameCatalog.position(p.gamePackage))
         gamePackage.setText(p.gamePackage)
         cpuPreset.setSelection(p.cpuMode.coerceIn(0, 3))
@@ -537,6 +564,7 @@ class MainActivity : Activity() {
         brightnessSeek.progress = (p.brightness + 50).coerceIn(0, 100)
         updateColorPreview()
         autoBoot.isChecked = p.autoBoot
+        restoring = false
     }
 
     override fun onResume() {
@@ -549,6 +577,7 @@ class MainActivity : Activity() {
 
     private fun updatePrivilegeIndicators() {
         if (!::shizukuLed.isInitialized) return
+        CommandRunner.connect(this)
         val state = ShizukuAccess.status()
         shizukuLed.text = "● SHIZUKU: " + state
         shizukuLed.setTextColor(if (state.startsWith("ĐÃ CẤP")) Color.rgb(68, 235, 160) else muted)
@@ -660,6 +689,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         try {
+            CommandRunner.disconnect()
             Shizuku.removeBinderReceivedListener(shizukuBinderListener)
             Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
         } catch (_: Throwable) {}
