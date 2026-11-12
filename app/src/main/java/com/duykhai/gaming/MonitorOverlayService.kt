@@ -62,13 +62,16 @@ class MonitorOverlayService : Service() {
 
     private fun updateScale() {
         val scale = scalePreference()
-        if (currentScale == scale) return
+        if (currentScale == scale && params?.alpha == getSharedPreferences("hud_prefs", MODE_PRIVATE)
+                .getInt("alpha", 85).coerceIn(40, 100) / 100f) return
         val layout = params ?: return
         val view = overlay ?: return
         currentScale = scale
         val factor = scale / 100f
         val screenWidth = resources.displayMetrics.widthPixels
         layout.width = (dp(288) * factor).roundToInt().coerceAtMost(screenWidth - dp(16))
+        layout.alpha = getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("alpha", 85)
+            .coerceIn(40, 100) / 100f
         output?.textSize = 12f * factor
         titleView?.textSize = 12f * factor
         detailView?.textSize = 10f * factor
@@ -87,9 +90,15 @@ class MonitorOverlayService : Service() {
                     ui.post {
                         if (active) {
                             detailView?.text = data.diagnostic.take(140)
-                            output?.text = "FPS: " + PerformanceMonitor.fpsLabel(data.fps) +
-                                "\nCPU: " + PerformanceMonitor.temperatureLabel(data.temperatureC) +
-                                "\nXUNG: " + PerformanceMonitor.clocksLabel(data.cpuClocks)
+                            val preferences = getSharedPreferences("hud_prefs", MODE_PRIVATE)
+                            val lines = mutableListOf<String>()
+                            if (preferences.getBoolean("fps", true))
+                                lines.add("FPS: " + PerformanceMonitor.fpsLabel(data.fps))
+                            if (preferences.getBoolean("temp", true))
+                                lines.add("CPU: " + PerformanceMonitor.temperatureLabel(data.temperatureC))
+                            if (preferences.getBoolean("clock", true))
+                                lines.add("XUNG: " + PerformanceMonitor.clocksLabel(data.cpuClocks))
+                            output?.text = if (lines.isEmpty()) "Bật thông số trong DuyKhaiDex" else lines.joinToString("\n")
                         }
                         busy.set(false)
                     }
@@ -203,9 +212,15 @@ class MonitorOverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            val corner = getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("corner", 1)
+            gravity = when (corner) {
+                0 -> Gravity.TOP or Gravity.START
+                1 -> Gravity.TOP or Gravity.END
+                2 -> Gravity.BOTTOM or Gravity.START
+                else -> Gravity.BOTTOM or Gravity.END
+            }
             x = dp(14)
-            y = dp(110)
+            y = dp(85)
         }
         title.setOnTouchListener(object : View.OnTouchListener {
             private var originX = 0
