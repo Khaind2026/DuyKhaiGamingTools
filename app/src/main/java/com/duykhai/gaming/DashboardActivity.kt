@@ -344,7 +344,7 @@ class DashboardActivity : Activity() {
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
             addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
-            addView(label("Gaming Tools    v0.6.0", 17f, ui.purple, true))
+            addView(label("Gaming Tools    v0.6.1", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label("⚙", 27f, ui.white, true).apply {
@@ -1072,7 +1072,7 @@ class DashboardActivity : Activity() {
         val about = panel(body, ui.cyan)
         groupTitle(about, "THÔNG TIN ỨNG DỤNG")
         about.addView(label("DuyKhaiDex Gaming Tools", 16f, ui.white, true))
-        about.addView(label("Phiên bản 0.6.0 • Space Neon Plus", 12f, ui.muted))
+        about.addView(label("Phiên bản 0.6.1 • Root & Sensor Fix", 12f, ui.muted))
         about.addView(label("Samsung DeX • Zalo 0862134811", 14f, ui.green, true))
         action(about, "MỞ ZALO") { openZalo() }
     }
