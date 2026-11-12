@@ -22,6 +22,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -46,17 +47,46 @@ class MonitorOverlayService : Service() {
     private var params: WindowManager.LayoutParams? = null
     private var hasRoot = false
     private var output: TextView? = null
+    private var titleView: TextView? = null
+    private var detailView: TextView? = null
+    private var currentScale = -1
+
+    private fun scalePreference(): Int =
+        getSharedPreferences("hud_prefs", MODE_PRIVATE).getInt("scale", 100).coerceIn(60, 160)
+
+    private fun changeScale(step: Int) {
+        val value = (scalePreference() + step).coerceIn(60, 160)
+        getSharedPreferences("hud_prefs", MODE_PRIVATE).edit().putInt("scale", value).apply()
+        updateScale()
+    }
+
+    private fun updateScale() {
+        val scale = scalePreference()
+        if (currentScale == scale) return
+        val layout = params ?: return
+        val view = overlay ?: return
+        currentScale = scale
+        val factor = scale / 100f
+        val screenWidth = resources.displayMetrics.widthPixels
+        layout.width = (dp(288) * factor).roundToInt().coerceAtMost(screenWidth - dp(16))
+        output?.textSize = 12f * factor
+        titleView?.textSize = 12f * factor
+        detailView?.textSize = 10f * factor
+        try { windowManager.updateViewLayout(view, layout) } catch (_: Exception) {}
+    }
+
 
     private val tick = object : Runnable {
         override fun run() {
             if (!active) return
             if (busy.compareAndSet(false, true)) {
-                val packageName = Profiles.load(this@MonitorOverlayService).gamePackage
+                val packageName = getSharedPreferences("hud_prefs", MODE_PRIVATE).getString("game", Profiles.load(this@MonitorOverlayService).gamePackage).orEmpty()
                 worker.execute {
                     val data = try { PerformanceMonitor.sample(packageName, hasRoot) }
                         catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không thể đọc cảm biến") }
                     ui.post {
                         if (active) {
+                            detailView?.text = data.diagnostic.take(140)
                             output?.text = "FPS: " + PerformanceMonitor.fpsLabel(data.fps) +
                                 "\nCPU: " + PerformanceMonitor.temperatureLabel(data.temperatureC) +
                                 "\nXUNG: " + PerformanceMonitor.clocksLabel(data.cpuClocks)
@@ -65,6 +95,7 @@ class MonitorOverlayService : Service() {
                     }
                 }
             }
+            updateScale()
             ui.postDelayed(this, 3_000L)
         }
     }
@@ -137,19 +168,34 @@ class MonitorOverlayService : Service() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val title = label("DUYKHAIDEX • HUD", 12f).apply { setTextColor(Color.rgb(0, 220, 255)) }
+        val title = label("DUYKHAIDEX • HUD", 12f).apply {
+            setTextColor(Color.rgb(0, 220, 255))
+        }
+        titleView = title
         val close = label("✕", 17f).apply {
             contentDescription = "Đóng màn hình theo dõi"
             setOnClickListener { stopSelf() }
         }
+        val smaller = label("−", 18f).apply {
+            contentDescription = "Thu nhỏ HUD"
+            setOnClickListener { changeScale(-10) }
+        }
+        val bigger = label("+", 18f).apply {
+            contentDescription = "Phóng to HUD"
+            setOnClickListener { changeScale(10) }
+        }
         header.addView(title, LinearLayout.LayoutParams(0, dp(34), 1f))
+        header.addView(smaller)
+        header.addView(bigger)
         header.addView(close)
         container.addView(header)
         output = label("FPS: —\nCPU: —\nXUNG: —", 12f)
         container.addView(output)
-        container.addView(label("FPS ≠ Hz • chỉ là ước tính", 10f).apply {
+        val detail = label("FPS chưa đo • chạy game để lấy mẫu", 10f).apply {
             setTextColor(Color.rgb(170, 190, 210))
-        })
+        }
+        detailView = detail
+        container.addView(detail)
         val lp = WindowManager.LayoutParams(
             dp(288),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -190,6 +236,7 @@ class MonitorOverlayService : Service() {
         windowManager.addView(container, lp)
         overlay = container
         params = lp
+        updateScale()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
@@ -200,6 +247,8 @@ class MonitorOverlayService : Service() {
         overlay?.let { try { windowManager.removeView(it) } catch (_: Exception) {} }
         overlay = null
         output = null
+        titleView = null
+        detailView = null
         worker.shutdownNow()
         super.onDestroy()
     }
