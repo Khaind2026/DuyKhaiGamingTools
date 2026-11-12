@@ -77,7 +77,7 @@ object CommandRunner {
     }
     fun ready() = service?.asBinder()?.isBinderAlive == true
     fun run(command: String, root: Boolean): Array<String> = try {
-        if (root) ShellProcess.execute(listOf("su", "-c", command))
+        if (root) RootSession.command(command)
         else service?.execute(command) ?: arrayOf("1", "Shizuku shell chưa sẵn sàng; cấp quyền rồi thử lại")
     } catch (e: InterruptedException) {
         Thread.currentThread().interrupt()

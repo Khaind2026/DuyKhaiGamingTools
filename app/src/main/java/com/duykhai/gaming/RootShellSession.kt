@@ -30,7 +30,7 @@ class ShellSession(private val argv: List<String>) {
             writer?.apply {
                 write(command)
                 newLine()
-                write("printf '\\n" + marker + ":%s\\n' \"\\$?\"")
+                write("printf '\\n" + marker + ":%s\\n' " + 36.toChar() + "?")
                 newLine()
                 flush()
             }
