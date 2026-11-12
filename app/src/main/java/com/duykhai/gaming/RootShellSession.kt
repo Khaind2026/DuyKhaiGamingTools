@@ -113,6 +113,17 @@ object RootSession {
         return granted
     }
 
+    @Volatile private var recoveryAttempted = false
+
+    // A single automatic recovery after user previously approved persistent Root.
+    // Never spin spawning su in HUD, onResume, or a 1.5-second sensor timer.
+    @Synchronized fun reconnectOnce(): Boolean {
+        if (status()) return true
+        if (recoveryAttempted) return false
+        recoveryAttempted = true
+        return request()
+    }
+
     fun command(shell: String): Array<String> {
         if (!status()) return arrayOf("1", "Root chưa được cấp hoặc phiên đã mất; bấm cấp quyền Root")
         val result = session.execute(shell, 12000L)

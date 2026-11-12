@@ -7,8 +7,21 @@ import rikka.shizuku.Shizuku
 
 /** Root is required for CPU; display commands can also use the Shizuku service. */
 object RootAccess {
+    private const val PREFS = "duykhaidex_root"
     fun status(): Boolean = RootSession.status()
     fun request(): Boolean = RootSession.request()
+    fun request(context: Context): Boolean {
+        val granted = RootSession.request()
+        if (granted) context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean("remembered_permission", true).apply()
+        return granted
+    }
+    fun reconnectIfRemembered(context: Context): Boolean {
+        if (RootSession.status()) return true
+        if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean("remembered_permission", false)) return false
+        return RootSession.reconnectOnce()
+    }
     fun invalidate() = RootSession.invalidate()
 }
 
