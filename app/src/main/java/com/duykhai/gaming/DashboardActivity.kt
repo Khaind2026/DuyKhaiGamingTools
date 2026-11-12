@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
+import android.widget.HorizontalScrollView
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -381,49 +382,56 @@ class DashboardActivity : Activity() {
         root.addView(externalHint)
         root.addView(blank(9))
 
+        root.addView(label("CÔNG CỤ • VUỐT NGANG ĐỂ XEM THÊM", 13f, ui.cyan, true))
+        root.addView(blank(8))
         val features = arrayOf(
-            Triple("Tối Ưu\nGame", 0xFF9A4DFF.toInt(), "game"),
+            Triple("Tối ưu Game", 0xFF9A4DFF.toInt(), "game"),
             Triple("Khóa Hz", 0xFFFF902F.toInt(), "hz"),
-            Triple("Tỷ Lệ Màn\nHình", 0xFF04C3FC.toInt(), "display"),
-            Triple("CPU &\nHiệu Năng", 0xFF23D781.toInt(), "cpu"),
-            Triple("Màu Sắc &\nHiển Thị", 0xFFF057D5.toInt(), "color"),
-            Triple("HUD Theo Dõi", 0xFFE8EFFF.toInt(), "hud"),
-            Triple("Quản Lý\nGame", 0xFF287EFF.toInt(), "games"),
-            Triple("Công Cụ\nKhác", 0xFF8A38FF.toInt(), "other"),
-            Triple("Cài Đặt", 0xFF15C4FA.toInt(), "settings"),
+            Triple("Màn hình", 0xFF04C3FC.toInt(), "display"),
+            Triple("CPU", 0xFF23D781.toInt(), "cpu"),
+            Triple("Màu sắc", 0xFFF057D5.toInt(), "color"),
+            Triple("HUD", 0xFFE8EFFF.toInt(), "hud"),
             Triple("Fold / Flip", 0xFFEA4DFF.toInt(), "fold"),
-            Triple("Buộc Xoay", 0xFF65E5FF.toInt(), "rotate")
+            Triple("Buộc xoay", 0xFF65E5FF.toInt(), "rotate"),
+            Triple("Công cụ", 0xFF8A38FF.toInt(), "other"),
+            Triple("Cài đặt", 0xFF15C4FA.toInt(), "settings")
         )
-        features.toList().chunked(3).forEach { pack ->
-            val gridRow = row()
-            pack.forEach { (title, color, key) ->
-                val tile = vertical().apply {
-                    gravity = Gravity.CENTER
-                    setPadding(dp(2), dp(6), dp(2), dp(5))
-                    background = ui.card(this@DashboardActivity, ui.purple)
-                    elevation = dp(3).toFloat()
-                }
-                val emblem = when (key) {
-                    "hz" -> "Hz"
-                    "cpu" -> "◆"
-                    "hud" -> "⌁"
-                    "color" -> "✿"
-                    "settings" -> "⚙"
-                    else -> ""
-                }
-                tile.addView(CrewFigureView(this, color, emblem), LinearLayout.LayoutParams(-1, dp(75)))
-                tile.addView(label(title, 12.5f, ui.white, true).apply {
-                    gravity = Gravity.CENTER
-                    textAlignment = View.TEXT_ALIGNMENT_CENTER
-                    minHeight = dp(34)
-                })
-                tile.setOnClickListener { openPage(key) }
-                gridRow.addView(tile, LinearLayout.LayoutParams(0, dp(120), 1f).apply {
-                    leftMargin = dp(3)
-                    rightMargin = dp(3)
-                })
+        val menuScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val menuRow = row()
+        features.forEach { (title, color, key) ->
+            val tile = vertical().apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(5), dp(5), dp(5), dp(6))
+                background = ui.card(this@DashboardActivity,
+                    if (key == "color" || key == "cpu") ui.cyan else ui.purple)
+                elevation = dp(4).toFloat()
+                contentDescription = "Mở " + title
             }
-            root.addView(gridRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+            tile.addView(CrewFigureView(this, color, when (key) {
+                "hz" -> "Hz"; "cpu" -> "◆"; "hud" -> "⌁"
+                "color" -> "✿"; "settings" -> "⚙"; else -> ""
+            }), LinearLayout.LayoutParams(dp(67), dp(65)))
+            tile.addView(label(title, 12f, ui.white, true).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }, LinearLayout.LayoutParams(-1, dp(26)))
+            tile.setOnClickListener { openPage(key) }
+            menuRow.addView(tile, LinearLayout.LayoutParams(dp(111), dp(109)).apply {
+                rightMargin = dp(9)
+            })
+        }
+        menuScroll.addView(menuRow)
+        root.addView(menuScroll)
+        root.addView(blank(12))
+
+        if (getSharedPreferences("visual_demo", MODE_PRIVATE).getBoolean("battery999", false)) {
+            root.addView(label("PIN DEMO 999% • chỉ ở DuyKhaiDex; không đổi pin Android",
+                12f, ui.cyan, true))
+            root.addView(blank(9))
         }
         val sales = panel(root, ui.purple)
         sales.addView(label("🚀  Samsung DeX • Android Box • Gaming", 15f, ui.white, true))
@@ -446,7 +454,6 @@ class DashboardActivity : Activity() {
             "cpu" -> renderCpu()
             "color" -> renderColor()
             "hud" -> renderHud()
-            "games" -> renderGames()
             "other" -> renderOther()
             "settings" -> renderSettings()
             "fold" -> renderFold()
@@ -820,41 +827,6 @@ class DashboardActivity : Activity() {
         }
         action(box, "MỞ CÀI ĐẶT MÀN HÌNH SAMSUNG") {
             startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
-        }
-    }
-
-    private fun renderGames() {
-        val body = begin("games", "Quản Lý Game", ui.cyan)
-        val p = Profiles.load(this)
-        val c = panel(body, ui.purple)
-        groupTitle(c, "CHỌN GAME ĐỂ THEO DÕI FPS", ui.cyan)
-        val game = spinner(GameCatalog.labels, GameCatalog.position(p.gamePackage))
-        c.addView(game)
-        val custom = EditText(this).apply {
-            setSingleLine(true)
-            setTextColor(Color.WHITE)
-            setText(p.gamePackage)
-            hint = "com.example.game"
-            setHintTextColor(ui.muted)
-        }
-        c.addView(custom)
-        game.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (position > 0) custom.setText(GameCatalog.packages[position])
-            }
-        }
-        status(c)
-        action(c, "LƯU GAME") {
-            val pkg = custom.text.toString().trim()
-            Profiles.save(this, Profiles.load(this).copy(gamePackage = pkg))
-            getSharedPreferences("hud_prefs", MODE_PRIVATE).edit().putString("game", pkg).apply()
-            feedback?.text = "✓ Đã lưu package: " + pkg
-        }
-        action(c, "MỞ GAME ĐÃ CHỌN") {
-            val pkg = custom.text.toString().trim()
-            val launch = packageManager.getLaunchIntentForPackage(pkg)
-            if (launch == null) toast("Không tìm thấy game này trên máy") else startActivity(launch)
         }
     }
 
