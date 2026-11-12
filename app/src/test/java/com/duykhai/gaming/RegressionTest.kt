@@ -27,7 +27,7 @@ class RegressionTest {
                 assertEquals(output, 0, process.waitFor())
                 assertEquals(expected, policy.resolve("scaling_max_freq").readText().trim())
                 assertTrue(output.contains("actual=$expected"))
-                assertEquals(if (mode == 3) "1800000" else "1000000", policy.resolve("scaling_min_freq").readText())
+                assertEquals(if (mode == 3) "1800000" else "1000000", policy.resolve("scaling_min_freq").readText().trim())
             }
         } finally { root.deleteRecursively() }
     }
