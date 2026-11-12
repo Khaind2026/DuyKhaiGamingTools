@@ -52,24 +52,37 @@ class DashboardActivity : Activity() {
     private var fpsValue: TextView? = null
     private var tempValue: TextView? = null
     private var clockValue: TextView? = null
+    private var cpuTemperatureValue: TextView? = null
+    private var cpuClocksValue: TextView? = null
+    private var cpuSensorsValue: TextView? = null
+    private var hudPendingPermission = false
+    @Volatile private var cachedExternal: PerformanceMonitor.ExternalReadout? = null
+    private var lastExternalTime = 0L
     private var feedback: TextView? = null
     private var foldRollback: Runnable? = null
     private var foldStates: List<FoldState> = emptyList()
 
     private val tick = object : Runnable {
         override fun run() {
-            if (page != "home") return
+            if (page != "home" && page != "cpu") return
             if (sampling.compareAndSet(false, true)) {
                 val pkg = Profiles.load(this@DashboardActivity).gamePackage
                 worker.execute {
                     val useExternal = getSharedPreferences("hud_prefs", MODE_PRIVATE)
                         .getString("source", "external") != "game"
                     val sample = try {
-                        PerformanceMonitor.sample(if (useExternal) "" else pkg, RootAccess.status())
+                        PerformanceMonitor.sample(
+                            if (page == "home" && !useExternal) pkg else "",
+                            RootAccess.status(), this@DashboardActivity)
                     } catch (_: Exception) { MonitorSnapshot(null, null, emptyList(), "Không có dữ liệu") }
-                    val outer = if (useExternal) try {
-                        PerformanceMonitor.external(this@DashboardActivity, RootAccess.status())
-                    } catch (_: Exception) { null } else null
+                    val outer = if (page == "home" && useExternal) try {
+                        val now = System.currentTimeMillis()
+                        if (cachedExternal == null || now - lastExternalTime > 4000L) {
+                            cachedExternal = PerformanceMonitor.external(this@DashboardActivity, RootAccess.status())
+                            lastExternalTime = now
+                        }
+                        cachedExternal
+                    } catch (_: Exception) { cachedExternal } else null
                     runOnUiThread {
                         if (page == "home") {
                             val visibleFps = if (useExternal) outer?.presentedLayerFps else sample.fps
@@ -82,12 +95,24 @@ class DashboardActivity : Activity() {
                             clockValue?.text = sample.cpuClocks.maxOfOrNull { it.second }?.let {
                                 String.format(Locale.US, "%.2f GHz", it / 1000f)
                             } ?: "—"
+                        } else if (page == "cpu") {
+                            cpuTemperatureValue?.text = sample.temperatureC?.let {
+                                String.format(Locale.US, "CPU hotspot: %.1f°C • %s", it,
+                                    sample.sensorName ?: "không xác định")
+                            } ?: "Không có cảm biến CPU được xác định"
+                            cpuClocksValue?.text = PerformanceMonitor.clocksLabel(sample.cpuClocks) +
+                                "\nNguồn: " + (sample.clockSource ?: "không đọc được")
+                            cpuSensorsValue?.text = sample.temperatureReadings.take(20)
+                                .joinToString("\n") {
+                                    String.format(Locale.US, "%s = %.1f°C (%s)",
+                                        it.id, it.celsius, it.source)
+                                }.ifBlank { "Kernel chưa cấp danh sách thermal_zone" }
                         }
                         sampling.set(false)
                     }
                 }
             }
-            handler.postDelayed(this, 3500)
+            handler.postDelayed(this, 1500)
         }
     }
 
@@ -103,7 +128,11 @@ class DashboardActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (page == "home") resumeStats()
+        if (page == "home" || page == "cpu") resumeStats()
+        if (hudPendingPermission && Settings.canDrawOverlays(this)) {
+            hudPendingPermission = false
+            toggleHud()
+        }
     }
 
     override fun onPause() {
@@ -140,6 +169,9 @@ class DashboardActivity : Activity() {
         fpsValue = null
         tempValue = null
         clockValue = null
+        cpuTemperatureValue = null
+        cpuClocksValue = null
+        cpuSensorsValue = null
         feedback = null
         container.removeAllViews()
         val scroll = ScrollView(this).apply {
@@ -256,6 +288,7 @@ class DashboardActivity : Activity() {
         val current = feedback
         current?.text = "Đang áp dụng cấu hình…"
         worker.execute {
+            if (!RootAccess.status()) RootAccess.reconnectIfRemembered(this)
             val result = DisplayRoot.apply(this, profile)
             if (result.ok) Profiles.save(this, profile)
             runOnUiThread {
@@ -273,11 +306,11 @@ class DashboardActivity : Activity() {
         val rootState = label(if (RootAccess.status()) "✓ ROOT" else "○ ROOT", 16f,
             if (RootAccess.status()) ui.green else ui.muted, true)
         rootBox.addView(rootState)
-        rootBox.addView(label(if (RootAccess.status()) "Đã kết nối" else "Nhấn để cấp quyền", 11f, ui.muted))
+        rootBox.addView(label(if (RootAccess.status()) "Phiên SU đang mở" else "Bấm một lần để cấp • tự nối lại khi dùng", 10f, ui.muted))
         rootBox.setOnClickListener {
             rootState.text = "ĐANG YÊU CẦU..."
             worker.execute {
-                RootAccess.request()
+                RootAccess.request(this@DashboardActivity)
                 runOnUiThread {
                     rootState.text = if (RootAccess.status()) "✓ ROOT" else "○ ROOT"
                     rootState.setTextColor(if (RootAccess.status()) ui.green else ui.muted)
@@ -610,14 +643,57 @@ class DashboardActivity : Activity() {
         card.addView(modes)
         note(card, "Đọc lại min/max sau khi áp dụng. Một số kernel Samsung không cho thay đổi; app sẽ báo lỗi thay vì khẳng định khóa thành công.")
         val readings = panel(body, ui.purple)
-        groupTitle(readings, "XUNG NHỊP CPU THEO CỤM", ui.cyan)
-        val clocks = label("Chưa đọc thông số", 14f, ui.white)
-        readings.addView(clocks)
+        groupTitle(readings, "DỮ LIỆU THỰC TẾ CỦA CẢM BIẾN", ui.cyan)
+        cpuTemperatureValue = label("CPU hotspot: đang đọc…", 15f, ui.green, true)
+        cpuClocksValue = label("Xung: đang đọc…", 13f, ui.white)
+        cpuSensorsValue = label("thermal_zone: đang đọc…", 11f, ui.muted)
+        readings.addView(cpuTemperatureValue)
+        readings.addView(blank(7))
+        readings.addView(cpuClocksValue)
+        readings.addView(blank(9))
+        readings.addView(label("DANH SÁCH SENSOR (tên & °C)", 12f, ui.cyan, true))
+        readings.addView(cpuSensorsValue)
+        note(readings, "cpuinfo_cur_freq được ưu tiên. scaling_cur_freq có thể là xung mà driver yêu cầu, không phải xung đo tức thời.")
+        val clocks = cpuClocksValue!!
         action(readings, "ĐỌC THÔNG SỐ CPU") {
             clocks.text = "Đang đọc..."
             worker.execute {
-                val snapshot = PerformanceMonitor.sample("", RootAccess.status())
-                runOnUiThread { clocks.text = PerformanceMonitor.clocksLabel(snapshot.cpuClocks) }
+                val snapshot = PerformanceMonitor.sample("", RootAccess.status(), this@DashboardActivity)
+                runOnUiThread {
+                    clocks.text = PerformanceMonitor.clocksLabel(snapshot.cpuClocks) +
+                        "\nNguồn: " + (snapshot.clockSource ?: "không đọc được")
+                    cpuTemperatureValue?.text = "CPU hotspot: " +
+                        PerformanceMonitor.temperatureLabel(snapshot.temperatureC) +
+                        " • " + (snapshot.sensorName ?: "chưa định danh")
+                }
+            }
+        }
+        action(readings, "CHỌN CẢM BIẾN NHIỆT MUỐN HIỂN THỊ") {
+            worker.execute {
+                val frame = RealtimeSensors.sample(this)
+                val probes = frame.temperatures
+                runOnUiThread {
+                    if (probes.isEmpty()) {
+                        toast("Không đọc được cảm biến. Kiểm tra Root/Shizuku hoặc ROM.")
+                    } else {
+                        val list = arrayOf("Tự động • CPU có nhãn rõ nhất") +
+                            probes.map {
+                                String.format(Locale.US, "%s = %.1f°C • %s",
+                                    it.id, it.celsius, it.source)
+                            }.toTypedArray()
+                        AlertDialog.Builder(this)
+                            .setTitle("Chọn cảm biến để theo dõi")
+                            .setItems(list) { _, index ->
+                                getSharedPreferences("monitor_sensor", MODE_PRIVATE).edit()
+                                    .putString("cpu_sensor",
+                                        if (index == 0) null else probes[index - 1].id)
+                                    .apply()
+                                toast("Đã chọn cảm biến • dữ liệu sẽ cập nhật liên tục")
+                            }
+                            .setNegativeButton("Đóng", null)
+                            .show()
+                    }
+                }
             }
         }
         status(readings)
@@ -626,6 +702,7 @@ class DashboardActivity : Activity() {
             applyProfile(current.copy(cpuMode = modes.selectedItemPosition, fps = 0, hz = 0,
                 resolution = 0, ratio = 0, customSize = false, dpiEnabled = false))
         }
+        resumeStats()
     }
 
     private fun renderHud() {
@@ -679,7 +756,10 @@ class DashboardActivity : Activity() {
             if (i >= 0) pref.edit().putInt("corner", i).apply()
         }
         config.addView(positions)
-        note(config, "Có thể kéo HUD đến vị trí khác bằng cách giữ thanh tiêu đề.")
+        note(config, "HUD có thể kéo trực tiếp bằng cách giữ chữ số. Cảm biến cập nhật khoảng 1,5 giây/lần.")
+        val hudStatus = getSharedPreferences("hud_diagnostics", MODE_PRIVATE)
+            .getString("last_status", "Chưa có kết quả chạy HUD") ?: "Chưa có kết quả"
+        note(config, "TRẠNG THÁI HUD GẦN NHẤT: " + hudStatus)
         status(config)
         action(config, if (MonitorOverlayService.active) "TẮT HUD NỔI" else "BẬT HUD NỔI") {
             toggleHud()
@@ -694,12 +774,14 @@ class DashboardActivity : Activity() {
         }
         if (!Settings.canDrawOverlays(this)) {
             toast("Cần quyền hiển thị trên ứng dụng khác")
+            hudPendingPermission = true
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:" + packageName)))
             return
         }
         getSharedPreferences("hud_prefs", MODE_PRIVATE).edit()
             .putString("game", Profiles.load(this).gamePackage).apply()
+        worker.execute { RootAccess.reconnectIfRemembered(this@DashboardActivity) }
         try {
             startForegroundService(Intent(this, MonitorOverlayService::class.java)
                 .setAction(MonitorOverlayService.ACTION_START))
