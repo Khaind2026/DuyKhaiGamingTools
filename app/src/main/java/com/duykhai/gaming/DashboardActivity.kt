@@ -50,6 +50,7 @@ class DashboardActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val sampling = AtomicBoolean(false)
     private var page = "home"
+    private var launchedFromPcm = false
     private var fpsValue: TextView? = null
     private var tempValue: TextView? = null
     private var clockValue: TextView? = null
@@ -124,7 +125,11 @@ class DashboardActivity : Activity() {
         container = FrameLayout(this)
         setContentView(container)
         try { Sui.init(packageName); CommandRunner.connect(this) } catch (_: Throwable) { }
-        renderHome()
+        launchedFromPcm = intent?.hasExtra("pcm_page") == true
+        val target = intent?.getStringExtra("pcm_page")
+        if (target != null && target in setOf("dex", "gpu", "cpu", "game", "hz", "display",
+                "rotate", "fold", "hud", "color", "other", "settings")) openPage(target)
+        else renderHome()
     }
 
     override fun onResume() {
@@ -148,7 +153,8 @@ class DashboardActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (page != "home") renderHome() else super.onBackPressed()
+        if (launchedFromPcm) finish()
+        else if (page != "home") renderHome() else super.onBackPressed()
     }
 
     private fun dp(n: Int) = ui.dp(this, n)
@@ -191,7 +197,7 @@ class DashboardActivity : Activity() {
             val back = label("❮", 28f, ui.white, true).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(8), 0, dp(12), 0)
-                setOnClickListener { renderHome() }
+                setOnClickListener { if (launchedFromPcm) finish() else renderHome() }
             }
             bar.addView(back, LinearLayout.LayoutParams(dp(45), dp(48)))
             bar.addView(CrewFigureView(this, color), LinearLayout.LayoutParams(dp(48), dp(56)))
@@ -344,8 +350,8 @@ class DashboardActivity : Activity() {
         val logo = ImageView(this).apply { setImageResource(R.drawable.ic_duykhaidex) }
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
-            addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
-            addView(label("Gaming Tools    v0.8.0", 17f, ui.purple, true))
+            addView(label("PCM Gaming", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
+            addView(label("Gaming Tools    v1.0.0", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label("⚙", 27f, ui.white, true).apply {
@@ -431,7 +437,7 @@ class DashboardActivity : Activity() {
         root.addView(blank(12))
 
         if (getSharedPreferences("visual_demo", MODE_PRIVATE).getBoolean("battery999", false)) {
-            root.addView(label("PIN DEMO 999% • chỉ ở DuyKhaiDex; không đổi pin Android",
+            root.addView(label("PIN DEMO 999% • chỉ ở PCM Gaming; không đổi pin Android",
                 12f, ui.cyan, true))
             root.addView(blank(9))
         }
@@ -1240,7 +1246,7 @@ class DashboardActivity : Activity() {
                 put("gamePackage", p.gamePackage); put("cpuMode", p.cpuMode)
             }
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("DuyKhaiDex config", json.toString()))
+            clipboard.setPrimaryClip(ClipData.newPlainText("PCM Gaming config", json.toString()))
             toast("Đã sao chép cấu hình vào Clipboard")
         }
         action(store, "KHÔI PHỤC CẤU HÌNH TỪ JSON") {
@@ -1278,7 +1284,7 @@ class DashboardActivity : Activity() {
             isChecked = demoPrefs.getBoolean("battery999", false)
         }
         battery.addView(demoSwitch)
-        note(battery, "Chỉ thay đổi nhãn trong DuyKhaiDex, không giả % pin trong Android, " +
+        note(battery, "Chỉ thay đổi nhãn trong PCM Gaming, không giả % pin trong Android, " +
             "không ảnh hưởng quản lý sạc hoặc cảnh báo pin.")
         demoSwitch.setOnCheckedChangeListener { _, enabled ->
             demoPrefs.edit().putBoolean("battery999", enabled).apply()
@@ -1286,8 +1292,8 @@ class DashboardActivity : Activity() {
         }
         val about = panel(body, ui.cyan)
         groupTitle(about, "THÔNG TIN ỨNG DỤNG")
-        about.addView(label("DuyKhaiDex Gaming Tools", 16f, ui.white, true))
-        about.addView(label("Phiên bản 0.8.0 • DeX & Performance", 12f, ui.muted))
+        about.addView(label("PCM Gaming Gaming Tools", 16f, ui.white, true))
+        about.addView(label("Phiên bản 1.0.0 • PCM Crew Rebuild", 12f, ui.muted))
         about.addView(label("Samsung DeX • Zalo 0862134811", 14f, ui.green, true))
         action(about, "MỞ ZALO") { openZalo() }
     }
