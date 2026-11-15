@@ -28,6 +28,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <activity android:name=".PcmFirmwareLabActivity" android:exported="false" />
         <activity android:name=".DashboardActivity" android:exported="false"/>
         <activity android:name=".MainActivity" android:exported="false"/>
         <receiver android:name=".BootReceiver" android:enabled="true" android:exported="false">
