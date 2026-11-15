@@ -28,6 +28,7 @@ class PcmGamingActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
     private var active = false
+    private var currentPage = "home"
     private var rootView: FrameLayout? = null
     private var cpuLabel: TextView? = null
     private var fpsLabel: TextView? = null
@@ -184,6 +185,7 @@ class PcmGamingActivity : Activity() {
     }
 
     private fun renderHome() {
+        currentPage = "home"
         val body = screen()
         val banner = card(red)
         val top = row()
@@ -335,6 +337,7 @@ class PcmGamingActivity : Activity() {
     }
 
     private fun renderBattery() {
+        currentPage = "renderBattery"
         val body = screen()
         backBar(body, "PIN / NGUỒN", orange)
         val power = card(orange)
@@ -362,6 +365,7 @@ class PcmGamingActivity : Activity() {
     }
 
     private fun renderMultiwindow() {
+        currentPage = "renderMultiwindow"
         val body = screen()
         backBar(body, "DEX • MULTIWINDOW", sky)
         val p = card(sky)
@@ -378,6 +382,7 @@ class PcmGamingActivity : Activity() {
     }
 
     private fun renderAbout() {
+        currentPage = "renderAbout"
         val body = screen()
         backBar(body, "VỀ PCM GAMING", purple)
         val card = card(purple)
@@ -419,6 +424,6 @@ class PcmGamingActivity : Activity() {
         android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show()
     }
     override fun onBackPressed() {
-        renderHome()
+        if (currentPage == "home") super.onBackPressed() else renderHome()
     }
 }
