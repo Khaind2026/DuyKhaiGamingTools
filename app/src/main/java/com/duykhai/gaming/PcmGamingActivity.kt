@@ -377,6 +377,18 @@ class PcmGamingActivity : Activity() {
             startActivity(Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS))
         })
         p.addView(gap(8))
+        p.addView(button("MỞ SAMSUNG GOOD LOCK", red) {
+            val launch = packageManager.getLaunchIntentForPackage("com.samsung.android.goodlock")
+            if (launch == null) toast("Good Lock chưa cài hoặc ROM không hỗ trợ")
+            else try { startActivity(launch) } catch (_: Exception) { toast("Không mở được Good Lock") }
+        })
+        p.addView(gap(8))
+        p.addView(button("MỞ MULTISTAR (NẾU ĐÃ CÀI)", purple) {
+            val launch = packageManager.getLaunchIntentForPackage("com.samsung.android.multistar")
+            if (launch == null) toast("MultiStar chưa cài hoặc không hỗ trợ")
+            else try { startActivity(launch) } catch (_: Exception) { toast("Không mở được MultiStar") }
+        })
+        p.addView(gap(8))
         p.addView(button("KIỂM TRA HDMI 120HZ", orange) { openTool("dex") })
         addCard(body, p)
     }
