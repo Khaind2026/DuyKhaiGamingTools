@@ -55,7 +55,7 @@ object PcmFirmwareTools {
         if (!file.exists() || file.length() == 0L) return "Không có bản sao."
         return try {
             val magic = file.inputStream().use {
-                String(it.readNBytes(8), Charsets.US_ASCII)
+                ByteArray(8).let { bytes -> val n = it.read(bytes); String(bytes, 0, n.coerceAtLeast(0), Charsets.US_ASCII) }
             }
             val kind = when {
                 magic.startsWith("ANDROID!") -> "Android Boot/Init Boot"
@@ -71,7 +71,7 @@ object PcmFirmwareTools {
     fun inspectUri(context: Context, uri: Uri): String {
         return try {
             val input = context.contentResolver.openInputStream(uri) ?: return "Không mở được file."
-            val magic = input.use { String(it.readNBytes(8), Charsets.US_ASCII) }
+            val magic = input.use { ByteArray(8).let { bytes -> val n = it.read(bytes); String(bytes, 0, n.coerceAtLeast(0), Charsets.US_ASCII) } }
             if (magic.startsWith("ANDROID!") || magic.startsWith("VNDRBOOT"))
                 "Header Boot hợp lệ về mặt định dạng cơ bản. CHƯA xác nhận tương thích model/firmware."
             else "Không nhận diện được Boot image. Không dùng làm firmware để flash."
