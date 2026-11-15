@@ -47,6 +47,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-enabled verification and maintenance of external HDMI refresh mode" />
         </service>
+        <service
+            android:name=".PcmDexTileService"
+            android:label="PCM DeX"
+            android:icon="@drawable/ic_pcm_gaming"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <service android:name=".ApplyJobService"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
