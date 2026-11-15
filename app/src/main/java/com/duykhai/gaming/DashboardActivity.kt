@@ -345,7 +345,7 @@ class DashboardActivity : Activity() {
         header.addView(logo, LinearLayout.LayoutParams(dp(65), dp(75)))
         val name = vertical().apply {
             addView(label("DuyKhaiDex", 26f, ui.white, true).apply { setTypeface(null, android.graphics.Typeface.BOLD_ITALIC) })
-            addView(label("Gaming Tools    v0.7.0", 17f, ui.purple, true))
+            addView(label("Gaming Tools    v0.8.0", 17f, ui.purple, true))
         }
         header.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label("⚙", 27f, ui.white, true).apply {
@@ -387,8 +387,10 @@ class DashboardActivity : Activity() {
         val features = arrayOf(
             Triple("Tối ưu Game", 0xFF9A4DFF.toInt(), "game"),
             Triple("Khóa Hz", 0xFFFF902F.toInt(), "hz"),
+            Triple("DeX / HDMI", 0xFF22DDEC.toInt(), "dex"),
             Triple("Màn hình", 0xFF04C3FC.toInt(), "display"),
             Triple("CPU", 0xFF23D781.toInt(), "cpu"),
+            Triple("GPU / Game Mode", 0xFF32D899.toInt(), "gpu"),
             Triple("Màu sắc", 0xFFF057D5.toInt(), "color"),
             Triple("HUD", 0xFFE8EFFF.toInt(), "hud"),
             Triple("Fold / Flip", 0xFFEA4DFF.toInt(), "fold"),
@@ -450,6 +452,8 @@ class DashboardActivity : Activity() {
         when (id) {
             "game" -> renderGame()
             "hz" -> renderHz()
+            "dex" -> renderDex()
+            "gpu" -> renderGpu()
             "display" -> renderDisplay()
             "cpu" -> renderCpu()
             "color" -> renderColor()
@@ -1008,6 +1012,120 @@ class DashboardActivity : Activity() {
         }
     }
 
+
+    private fun renderDex() {
+        val body = begin("dex", "Samsung DeX • HDMI", ui.cyan)
+        val info = panel(body, ui.purple)
+        groupTitle(info, "KIỂM TRA MODE HDMI THỰC TẾ")
+        val detail = label("Đang kiểm tra màn hình ngoài…", 12f, ui.white)
+        info.addView(detail)
+        note(info, "Chỉ áp dụng mode HDMI có trong danh sách ROM công bố. " +
+            "Lệnh gửi thành công không đồng nghĩa cổng HDMI đã chạy 120Hz.")
+        action(info, "ĐỌC HDMI / MODE HOẠT ĐỘNG") {
+            detail.text = "Đang đọc trạng thái HDMI…"
+            worker.execute {
+                val report = DexDisplayControl.describe(this@DashboardActivity)
+                runOnUiThread { if (page == "dex") detail.text = report }
+            }
+        }
+        val control = panel(body, ui.cyan)
+        groupTitle(control, "YÊU CẦU TẦN SỐ QUÉT MÀN NGOÀI")
+        val targets = intArrayOf(60, 90, 120, 144, 165, 180, 200)
+        val choice = spinner(targets.map { it.toString() + " Hz" }.toTypedArray(), 2)
+        control.addView(choice)
+        note(control, "Khác với Khóa Hz màn trong. Dùng cmd display với ID HDMI thực, " +
+            "không ép mode không hỗ trợ và không ghi đè thermal.")
+        status(control)
+        action(control, "ÁP DỤNG MODE HDMI") {
+            val target = targets[choice.selectedItemPosition]
+            val output = feedback
+            output?.text = "Đang yêu cầu HDMI " + target + "Hz…"
+            worker.execute {
+                val result = DexDisplayControl.request(this@DashboardActivity, target)
+                val report = DexDisplayControl.describe(this@DashboardActivity)
+                runOnUiThread {
+                    if (page == "dex") {
+                        output?.text = result
+                        detail.text = report
+                    }
+                }
+            }
+        }
+        action(control, "HOÀN TÁC • MODE HDMI TỰ ĐỘNG") {
+            val output = feedback
+            worker.execute {
+                val result = DexDisplayControl.restore(this@DashboardActivity)
+                val report = DexDisplayControl.describe(this@DashboardActivity)
+                runOnUiThread {
+                    if (page == "dex") {
+                        output?.text = result
+                        detail.text = report
+                    }
+                }
+            }
+        }
+        val help = panel(body, ui.purple)
+        groupTitle(help, "GIẢI THÍCH KẾT QUẢ")
+        note(help, "ĐÃ GỬI LỆNH = Android nhận yêu cầu. " +
+            "ĐÃ XÁC NHẬN MODE = Android báo mode màn ngoài đúng. " +
+            "FPS game phải đo riêng bằng HUD, không thay bằng Hz màn hình.")
+        note(help, "Trên Samsung One UI, chính sách DeX/HDMI/HWC có thể từ chối " +
+            "mode 120Hz mặc dù màn hình công bố hỗ trợ. Không tự động hạ bảo vệ nhiệt.")
+        worker.execute {
+            val report = DexDisplayControl.describe(this@DashboardActivity)
+            runOnUiThread { if (page == "dex") detail.text = report }
+        }
+    }
+
+    private fun renderGpu() {
+        val body = begin("gpu", "GPU & Game Mode", ui.green)
+        val probe = panel(body, ui.cyan)
+        groupTitle(probe, "CẢM BIẾN VÀ XUNG NHỊP GPU")
+        val details = label("Nhấn ĐỌC GPU để xem kernel công bố gì.", 12f, ui.white)
+        probe.addView(details)
+        note(probe, "Tự tìm node Adreno/Mali. Không dùng tần số GPU hardcode cho mọi máy.")
+        action(probe, "ĐỌC GPU THỰC TẾ") {
+            details.text = "Đang đọc GPU…"
+            worker.execute {
+                val result = GamingPerformanceControl.gpuDiagnostics()
+                runOnUiThread { if (page == "gpu") details.text = result }
+            }
+        }
+        val game = panel(body, ui.purple)
+        groupTitle(game, "ANDROID GAME MODE")
+        val packageName = EditText(this).apply {
+            setSingleLine(true)
+            setTextColor(ui.white)
+            setText(Profiles.load(this@DashboardActivity).gamePackage)
+            hint = "com.tencent.ig"
+            setHintTextColor(ui.muted)
+        }
+        game.addView(packageName)
+        val modes = spinner(arrayOf("Tiêu chuẩn", "Ưu tiên hiệu năng", "Tiết kiệm pin"), 1)
+        game.addView(modes)
+        note(game, "Game Mode hoạt động khi ROM và trò chơi hỗ trợ. " +
+            "Không can thiệp bảng volt, kernel, nhiệt độ hoặc flash boot.")
+        status(game)
+        action(game, "ÁP DỤNG GAME MODE") {
+            val pkg = packageName.text.toString().trim()
+            val mode = arrayOf("standard", "performance", "battery")[modes.selectedItemPosition]
+            val output = feedback
+            output?.text = "Đang kiểm tra Game Mode…"
+            worker.execute {
+                val result = GamingPerformanceControl.setGameMode(pkg, mode)
+                runOnUiThread { if (page == "gpu") output?.text = result }
+            }
+        }
+        action(game, "KHÔI PHỤC GAME MODE TIÊU CHUẨN") {
+            val pkg = packageName.text.toString().trim()
+            val output = feedback
+            worker.execute {
+                val result = GamingPerformanceControl.setGameMode(pkg, "standard")
+                runOnUiThread { if (page == "gpu") output?.text = result }
+            }
+        }
+    }
+
     private fun renderSettings() {
         val body = begin("settings", "Cài Đặt", ui.cyan)
         val rights = panel(body, ui.purple)
@@ -1086,7 +1204,7 @@ class DashboardActivity : Activity() {
         val about = panel(body, ui.cyan)
         groupTitle(about, "THÔNG TIN ỨNG DỤNG")
         about.addView(label("DuyKhaiDex Gaming Tools", 16f, ui.white, true))
-        about.addView(label("Phiên bản 0.7.0 • Clean Menu & Color", 12f, ui.muted))
+        about.addView(label("Phiên bản 0.8.0 • DeX & Performance", 12f, ui.muted))
         about.addView(label("Samsung DeX • Zalo 0862134811", 14f, ui.green, true))
         action(about, "MỞ ZALO") { openZalo() }
     }
