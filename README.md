@@ -23,7 +23,7 @@ Phiên bản tái thiết kế giao diện tàu vũ trụ và phi hành gia lấ
 
 **Giới hạn DeX:** Đã gửi yêu cầu không đồng nghĩa HDMI vật lý chạy 120Hz. Kiểm tra `MODE ĐANG HOẠT ĐỘNG` trong PCM, đồng thời kiểm tra ở màn hình ngoài. App không thể tự tạo mode ngoài khả năng của phần cứng/HWC Samsung.
 
-**Cách build:** mở GitHub Actions → `Build DuyKhai Android APK` → chạy thành công → **Artifacts → DuyKhaiGamingTools-debug**. File APK sẽ có nhãn và icon PCM Gaming; signature debug có thể khác bản đã cài. Để nâng cấp giữ dữ liệu cần ký bằng cùng khóa với APK đang cài.
+**Cách build:** mở GitHub Actions → `Build PCM Gaming Android APK` → chạy thành công → **Artifacts → PCM-Gaming-debug**. File APK sẽ có nhãn và icon PCM Gaming; signature debug có thể khác bản đã cài. Để nâng cấp giữ dữ liệu cần ký bằng cùng khóa với APK đang cài.
 
 ---
 
