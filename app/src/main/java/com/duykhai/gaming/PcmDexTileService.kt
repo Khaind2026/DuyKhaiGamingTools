@@ -1,6 +1,7 @@
 package com.duykhai.gaming
 
 import android.content.Intent
+import android.app.PendingIntent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 
@@ -14,6 +15,7 @@ class PcmDexTileService : TileService() {
         refresh()
     }
 
+    @android.annotation.SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
         if (PcmDexMaintainService.active) {
@@ -29,8 +31,14 @@ class PcmDexTileService : TileService() {
         } else {
             val intent = Intent(this, PcmGamingActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(intent)
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                val pending = PendingIntent.getActivity(this, 71, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                startActivityAndCollapse(pending)
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+            }
         }
         refresh()
     }
