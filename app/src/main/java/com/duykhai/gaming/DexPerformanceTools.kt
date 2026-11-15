@@ -96,6 +96,32 @@ object DexDisplayControl {
             "Hz. Samsung HWC có thể bỏ qua yêu cầu."
     }
 
+    /**
+     * DeX workspace DPI is a logical density override, NOT physical HDMI resolution.
+     * Only modifies the external display's ID and includes a reset route.
+     */
+    fun setDensity(context: Context, dpi: Int?): String {
+        if (dpi != null && dpi !in setOf(240, 320, 480)) {
+            return "Preset DPI không hợp lệ"
+        }
+        val display = snapshot(context) ?: return "Không thấy màn HDMI/DeX"
+        val help = privileged("wm help")
+        if (help.getOrNull(0) != "0" ||
+            !help.getOrElse(1) { "" }.contains("density")) {
+            return "ROM không hỗ trợ lệnh wm density hoặc chưa có quyền"
+        }
+        val arg = dpi?.toString() ?: "reset"
+        val result = privileged("wm density " + arg + " -d " + display.displayId)
+        if (result.getOrNull(0) != "0") {
+            return "ROM từ chối chỉnh DPI: " + result.getOrElse(1) { "" }.take(200)
+        }
+        val current = privileged("wm density -d " + display.displayId)
+        return "Đã gửi yêu cầu DPI " + arg + " cho HDMI ID " + display.displayId +
+            if (current.getOrNull(0) == "0")
+                "\nĐọc lại: " + current.getOrElse(1) { "" }.take(220)
+            else "\nKhông xác minh được mật độ thực trên ROM này"
+    }
+
     fun restore(context: Context): String {
         val display = snapshot(context) ?: return "Không có HDMI/DeX để khôi phục."
         val help = privileged("cmd display help")
