@@ -1,3 +1,18 @@
+## PCM Gaming v1.1 — GPU/Boot Lab
+
+Trong giao diện Crew Control đã có **GPU / BOOT LAB**. Phần này thực hiện các tác vụ an toàn, có phản hồi từ thiết bị:
+
+- Nhận diện phân vùng boot, vendor_boot, init_boot **đang hoạt động** và kích thước từ kernel (cần Root).
+- Sao lưu ảnh gốc với xác minh đủ byte, nhận dạng header cơ bản, SHA-256 và xuất ảnh qua bộ chọn tệp Android. **Không ghi lại ảnh lên phân vùng**.
+- Mở file DTS do người dùng lựa chọn, liệt kê các thuộc tính GPU frequency / OPP / voltage theo tên thông dụng, không suy đoán các đơn vị hoặc SoC chưa hỗ trợ.
+- Kiểm tra BatteryService và khôi phục trạng thái báo cáo pin thật sau các bản giả lập từ công cụ khác.
+
+**Chưa có trong v1.1:** chỉnh bảng xung/điện áp, tái đóng gói DTB, flash boot image, hay giả pin lâu dài ở cấp hệ thống. Các thao tác này có thể gây bootloop, hỏng thiết bị hoặc che lấp thông tin pin thật. UI không quảng cáo chúng là hoàn thành. Dự án này không sao chép mã nhị phân `magiskboot`/`dtc` từ APK bên ngoài.
+
+Build với `Build PCM Gaming Android APK`, phiên bản `1.1.0` code 12; artifact `PCM-Gaming-debug`.
+
+---
+
 # PCM Gaming — Duy Khải
 
 **Tên ứng dụng:** PCM Gaming · **Phiên bản:** 1.0.0 · **SĐT/Zalo:** 0862134811 · **Tác giả giao diện mới:** Duy Khải.
