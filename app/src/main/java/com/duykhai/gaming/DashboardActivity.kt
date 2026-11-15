@@ -1115,6 +1115,65 @@ class DashboardActivity : Activity() {
                 runOnUiThread { if (page == "gpu") details.text = result }
             }
         }
+        val stock = panel(body, ui.green)
+        groupTitle(stock, "MAX STOCK • CPU + GPU", ui.green)
+        note(stock, "Yêu cầu trần CPU/GPU cao nhất trong bảng xung kernel, " +
+            "không ép điện áp, không chỉnh nguồn PMIC, không tắt thermal. " +
+            "Xung thực tế còn phụ thuộc tải, nhiệt và chính sách Samsung.")
+        val peakResult = label("Chưa áp dụng chế độ MAX STOCK", 12f, ui.white)
+        stock.addView(peakResult)
+        action(stock, "BẬT MAX STOCK CPU + GPU") {
+            if (!RootAccess.status()) {
+                peakResult.text = "Cần cấp quyền Root trước khi áp dụng."
+            } else {
+                peakResult.text = "Đang yêu cầu trần xung gốc và kiểm chứng…"
+                worker.execute {
+                    val report = PowerHealthReport.snapshot(this@DashboardActivity)
+                    val temp = this@DashboardActivity.registerReceiver(
+                        null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                        ?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+                    val cpu = if (temp >= 420) {
+                        arrayOf("1", "Pin đang từ 42°C, từ chối kích hoạt CPU MAX STOCK")
+                    } else {
+                        CommandRunner.run(CpuProfiles.command(3), true)
+                    }
+                    val gpu = if (temp >= 420) "GPU không áp dụng vì nhiệt độ pin cao."
+                        else StockGpuBoost.enable(this@DashboardActivity)
+                    val result = "CPU: " + (if (cpu.getOrNull(0) == "0") "Đã kiểm tra trần gốc. "
+                        else "Không áp dụng được. ") +
+                        cpu.getOrElse(1) { "" }.take(900) +
+                        "\nGPU: " + gpu + "\n\n" + report
+                    runOnUiThread { if (page == "gpu") peakResult.text = result }
+                }
+            }
+        }
+        action(stock, "KHÔI PHỤC TRẦN CPU + GPU") {
+            if (!RootAccess.status()) {
+                peakResult.text = "Cần cấp Root để khôi phục."
+            } else {
+                peakResult.text = "Đang khôi phục…"
+                worker.execute {
+                    val cpu = CommandRunner.run(CpuProfiles.resetCommand(), true)
+                    val gpu = StockGpuBoost.restore(this@DashboardActivity)
+                    runOnUiThread {
+                        if (page == "gpu") peakResult.text = "CPU: " +
+                            cpu.getOrElse(1) { "không có kết quả" }.take(700) +
+                            "\nGPU: " + gpu
+                    }
+                }
+            }
+        }
+        val power = panel(body, ui.cyan)
+        groupTitle(power, "NGUỒN ĐIỆN & NHIỆT ĐỘ PIN")
+        val powerLabel = label("Đang đọc trạng thái nguồn…", 12f, ui.white)
+        power.addView(powerLabel)
+        note(power, "Chỉ đo dữ liệu pin Android cung cấp, không phải điện áp CPU/GPU. " +
+            "Ứng dụng không thể tăng công suất chip bằng cách cấp điện ngoài.")
+        action(power, "ĐỌC NGUỒN ĐIỆN THỰC TẾ") {
+            val report = PowerHealthReport.snapshot(this@DashboardActivity)
+            powerLabel.text = report
+        }
+        powerLabel.text = PowerHealthReport.snapshot(this)
         val game = panel(body, ui.purple)
         groupTitle(game, "ANDROID GAME MODE")
         val packageName = EditText(this).apply {
