@@ -1,3 +1,32 @@
+# PCM Gaming — Duy Khải
+
+**Tên ứng dụng:** PCM Gaming · **Phiên bản:** 1.0.0 · **SĐT/Zalo:** 0862134811 · **Tác giả giao diện mới:** Duy Khải.
+
+Phiên bản tái thiết kế giao diện tàu vũ trụ và phi hành gia lấy cảm hứng từ *Among Us*, dùng Android Views vẽ trực tiếp, không đóng gói tài nguyên hoặc mã độc quyền từ trò chơi. Đây là **bản triển khai riêng từ dự án DuyKhaiGamingTools**, được đối chiếu tính năng từ APK Manager Device do người dùng cung cấp — **không phải bản dịch nguyên mã nguồn của APK**, vì file gốc chỉ chứa mã đã biên dịch/R8.
+
+## Các phòng chức năng PCM Gaming
+
+| Nhóm | Tính năng đang có | Nguồn triển khai |
+| --- | --- | --- |
+| DeX/HDMI | Danh sách mode màn ngoài, yêu cầu 60/90/120/144/165/180/200Hz nếu được ROM công bố, đọc lại Hz hoạt động, hoàn tác, DPI 240/320/480 | `DexPerformanceTools.kt` + `DashboardActivity.kt` |
+| DeX duy trì | Service foreground kiểm tra HDMI 9 giây/lần, chỉ gửi yêu cầu khi sai Hz, dừng bằng thông báo; Quick Settings tile PCM DeX | `PcmDexMaintainService.kt`, `PcmDexTileService.kt` |
+| Màn hình | Khóa Hz màn chính, kích thước/DPI logic, xoay màn, Fold/Flip `device_state` có hoàn tác | `MainActivity.kt`, `DisplayTools.kt` |
+| Hiệu năng CPU | ECO, BALANCED, MAX STOCK và đọc giới hạn từ kernel, không tắt thermal | `SystemExtras.kt` |
+| Hiệu năng GPU | Chẩn đoán Adreno/Mali, MAX STOCK từ các node được kernel công bố, sao lưu/khôi phục giới hạn | `StockGpuBoost.kt` |
+| Game | Gói ứng dụng tùy chọn, Android Game Mode, preset FPS theo hỗ trợ ROM | `DexPerformanceTools.kt`, `MainActivity.kt` |
+| FPS HUD | Đo frame timestamp SurfaceFlinger khi ROM cho phép, cảm biến nhiệt và xung CPU, overlay có kéo thả | `MonitorOverlayService.kt`, `PerformanceMonitor.kt` |
+| Pin & nguồn | Volt/dòng/nhiệt pin theo Android BatteryManager và nhãn pin demo trong ứng dụng | `StockGpuBoost.kt`, `PcmGamingActivity.kt` |
+| Tùy chỉnh | Màu sắc, saturation SurfaceFlinger khi có quyền, bảng cài đặt đa cửa sổ, mở Good Lock/MultiStar đã cài | `SystemColorControl.kt`, `PcmGamingActivity.kt` |
+| Tiện ích | Root session tái sử dụng, Shizuku, sao lưu cấu hình JSON, auto boot cho cấu hình nền tảng | `RootShellSession.kt`, `CommandRunner.kt`, `MainActivity.kt` |
+
+**Chưa chuyển nguyên tính năng từ Manager Device:** trình chỉnh bảng GPU/điện áp và flash boot (KonaBess), giả pin hệ thống liên tục, cài bản cập nhật APK ngầm qua Root, xác thực/license của app khác, và các tính năng chỉ có thể kiểm chứng trên ROM Samsung cụ thể. Không có nút giả cho các chức năng này. Các can thiệp thermal, quá áp/PMIC và flash partition không được tích hợp; muốn bổ sung cần nguồn mở phù hợp, thiết bị kiểm thử và kiểm tra an toàn.
+
+**Giới hạn DeX:** Đã gửi yêu cầu không đồng nghĩa HDMI vật lý chạy 120Hz. Kiểm tra `MODE ĐANG HOẠT ĐỘNG` trong PCM, đồng thời kiểm tra ở màn hình ngoài. App không thể tự tạo mode ngoài khả năng của phần cứng/HWC Samsung.
+
+**Cách build:** mở GitHub Actions → `Build PCM Gaming Android APK` → chạy thành công → **Artifacts → PCM-Gaming-debug**. File APK sẽ có nhãn và icon PCM Gaming; signature debug có thể khác bản đã cài. Để nâng cấp giữ dữ liệu cần ký bằng cùng khóa với APK đang cài.
+
+---
+
 # DuyKhaiDex Gaming Tools v0.7.0
 
 Samsung Android gaming display tuning project with a neon gaming icon, Root / Shizuku status indicators and an automatic debug APK build.
