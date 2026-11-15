@@ -16,18 +16,18 @@ import kotlin.math.min
 
 /** Native Android neon/space art. No external images, SDKs or network assets. */
 object NeonUi {
-    val cyan: Int = Color.rgb(27, 226, 255)
-    val purple: Int = Color.rgb(184, 68, 255)
-    val green: Int = Color.rgb(76, 247, 107)
-    val muted: Int = Color.rgb(175, 189, 222)
+    val cyan: Int = Color.rgb(93, 228, 255)
+    val purple: Int = Color.rgb(255, 76, 97)
+    val green: Int = Color.rgb(101, 241, 167)
+    val muted: Int = Color.rgb(165, 186, 211)
     val white: Int = Color.WHITE
-    val ink: Int = Color.rgb(6, 10, 30)
+    val ink: Int = Color.rgb(8, 15, 33)
 
     fun dp(c: Context, amount: Int): Int = (amount * c.resources.displayMetrics.density + .5f).toInt()
 
     fun card(c: Context, edge: Int = purple): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(
-            Color.rgb(45, 20, 106), Color.rgb(11, 11, 41), Color.rgb(46, 11, 93)
+            Color.rgb(29, 43, 67), Color.rgb(13, 20, 39), Color.rgb(35, 38, 65)
         )).apply {
             cornerRadius = dp(c, 17).toFloat()
             setStroke(dp(c, 2), edge)
@@ -35,10 +35,10 @@ object NeonUi {
 
     fun button(c: Context): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(
-            Color.rgb(235, 103, 255), Color.rgb(162, 20, 239), Color.rgb(108, 13, 189)
+            Color.rgb(255, 105, 121), Color.rgb(238, 67, 87), Color.rgb(160, 32, 54)
         )).apply {
             cornerRadius = dp(c, 11).toFloat()
-            setStroke(dp(c, 2), Color.rgb(255, 182, 255))
+            setStroke(dp(c, 2), Color.rgb(255, 162, 170))
         }
 
     fun text(c: Context, value: String, sp: Float, color: Int = white, bold: Boolean = false): TextView =
