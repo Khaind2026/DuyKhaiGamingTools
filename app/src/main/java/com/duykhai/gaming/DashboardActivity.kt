@@ -1070,6 +1070,39 @@ class DashboardActivity : Activity() {
                 }
             }
         }
+        val hold = panel(body, ui.green)
+        groupTitle(hold, "DUY TRÌ MODE HDMI • SERVICE")
+        val holdStatus = label("Dịch vụ: " +
+            if (PcmDexMaintainService.active) "ĐANG CHẠY"
+            else "ĐANG TẮT", 12f, ui.white)
+        hold.addView(holdStatus)
+        note(hold, "Kiểm tra mode HDMI mỗi 9 giây, chỉ yêu cầu lại khi Hz thực tế " +
+            "khác mục tiêu. Không thay thế chính sách DeX/HWC của Samsung.")
+        note(hold, "Dịch vụ không tự mở quyền Root hoặc cấp lại quyền liên tục. " +
+            "Hãy cấp quyền Root/Shizuku trước khi bật.")
+        action(hold, "BẬT DUY TRÌ HDMI / DEX") {
+            if (!RootAccess.status() && !CommandRunner.ready()) {
+                holdStatus.text = "Cấp Root hoặc Shizuku trước."
+            } else {
+                val hz = targets[choice.selectedItemPosition]
+                try {
+                    startForegroundService(Intent(this, PcmDexMaintainService::class.java)
+                        .setAction(PcmDexMaintainService.ACTION_START)
+                        .putExtra("target_hz", hz))
+                    holdStatus.text = "Đã yêu cầu duy trì " + hz + " Hz. Kiểm tra thông báo PCM."
+                } catch (e: Exception) {
+                    holdStatus.text = "Không thể khởi động service: " + e.message
+                }
+            }
+        }
+        action(hold, "DỪNG DUY TRÌ HDMI / DEX") {
+            stopService(Intent(this, PcmDexMaintainService::class.java))
+            holdStatus.text = "Đã yêu cầu dừng dịch vụ HDMI."
+        }
+        action(hold, "ĐỌC TÌNH TRẠNG SERVICE") {
+            holdStatus.text = getSharedPreferences("pcm_dex", MODE_PRIVATE)
+                .getString("last_status", "Dịch vụ chưa có dữ liệu") ?: "Chưa có dữ liệu"
+        }
         val density = panel(body, ui.purple)
         groupTitle(density, "DPI RIÊNG CHO HDMI / DeX")
         val dpiValues = intArrayOf(240, 320, 480)
