@@ -193,7 +193,7 @@ class PcmGamingActivity : Activity() {
             LinearLayout.LayoutParams(dp(72), dp(99)))
         val brand = column().apply {
             addView(title("PCM GAMING", 28f, white))
-            addView(title("CREW CONTROL // v1.0", 12f, sky))
+            addView(title("CREW CONTROL // v1.1", 12f, sky))
             addView(caption("BY DUY KHẢI  •  0862134811", 11f, white))
         }
         top.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
@@ -247,6 +247,9 @@ class PcmGamingActivity : Activity() {
         quick.addView(gap(9))
         quick.addView(button("KÍCH HOẠT MAX STOCK CPU / GPU", red) { openTool("gpu") })
         quick.addView(gap(7))
+        quick.addView(gap(8))
+        quick.addView(button("GPU / BOOT LAB • SAO LƯU", orange) { openTool("bootlab") })
+        quick.addView(gap(7))
         val quickRow = row()
         hudButton = button("MỞ FPS HUD", sky) { openTool("hud") }
         quickRow.addView(hudButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(5) })
@@ -266,6 +269,7 @@ class PcmGamingActivity : Activity() {
         section(body, "PHÒNG MÁY • HIỆU NĂNG", red, listOf(
             Tool("CPU BOOST", "ECO • Balanced • Max Stock", "cpu", red),
             Tool("GPU BOOST", "MAX Stock • Devfreq • Game", "gpu", purple),
+            Tool("GPU / BOOT LAB", "Ảnh boot • DTB/DTS • checksum", "bootlab", sky),
             Tool("TỐI ƯU GAME", "FPS • preset game", "game", orange),
             Tool("GIÁM SÁT FPS", "HUD • CPU • HDMI", "hud", sky),
             Tool("MÀU SẮC", "RGB • Saturation", "color", green),
@@ -318,6 +322,7 @@ class PcmGamingActivity : Activity() {
     private fun openTool(page: String) {
         when (page) {
             "battery" -> renderBattery()
+            "bootlab" -> startActivity(Intent(this, PcmFirmwareLabActivity::class.java))
             "about" -> renderAbout()
             "multiwindow" -> renderMultiwindow()
             else -> startActivity(Intent(this, DashboardActivity::class.java)
