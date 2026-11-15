@@ -1064,6 +1064,30 @@ class DashboardActivity : Activity() {
                 }
             }
         }
+        val density = panel(body, ui.purple)
+        groupTitle(density, "DPI RIÊNG CHO HDMI / DeX")
+        val dpiValues = intArrayOf(240, 320, 480)
+        val dpiChoice = spinner(arrayOf("240 DPI • Giao diện rộng", "320 DPI • Cân bằng",
+            "480 DPI • Chữ lớn"), 1)
+        density.addView(dpiChoice)
+        note(density, "Chỉ đổi mật độ logic của màn ngoài theo display ID, không " +
+            "nâng độ phân giải vật lý. Giao diện có thể thay đổi kích cỡ.")
+        val dpiReport = label("Chưa thay đổi DPI HDMI", 12f, ui.muted)
+        density.addView(dpiReport)
+        action(density, "ÁP DỤNG DPI HDMI") {
+            val value = dpiValues[dpiChoice.selectedItemPosition]
+            dpiReport.text = "Đang áp dụng…"
+            worker.execute {
+                val result = DexDisplayControl.setDensity(this@DashboardActivity, value)
+                runOnUiThread { if (page == "dex") dpiReport.text = result }
+            }
+        }
+        action(density, "KHÔI PHỤC DPI HDMI") {
+            worker.execute {
+                val result = DexDisplayControl.setDensity(this@DashboardActivity, null)
+                runOnUiThread { if (page == "dex") dpiReport.text = result }
+            }
+        }
         val help = panel(body, ui.purple)
         groupTitle(help, "GIẢI THÍCH KẾT QUẢ")
         note(help, "ĐÃ GỬI LỆNH = Android nhận yêu cầu. " +
